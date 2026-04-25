@@ -44,14 +44,34 @@ class SoundVirtual(Sound):
             self.executor, lambda f=filename: self._play(f)
         )
 
-    async def wait_until_done(self, event=None):
-        await wait_with_cancel_event(self.future, event, self.stop_playing)
-        self.future = None
-
     async def stop_playing(self):
         if self.currently_playing:
             self.currently_playing = False
-        await self.wait_until_done()
+        if self.future:
+            try:
+                await self.future
+            except Exception:
+                pass
+            self.future = None
+
+    async def wait_until_done(self, event=None):
+        if self.future:
+            if event:
+                event_wait_task = asyncio.create_task(event.wait())
+                done, pending = await asyncio.wait(
+                    {event_wait_task, self.future},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if self.future in pending:
+                    await self.stop_playing()
+                else:
+                    event_wait_task.cancel()
+            else:
+                try:
+                    await self.future
+                except Exception:
+                    pass
+            self.future = None
 
     async def start_recording(self, stream_cb):
         raise NotImplementedError("Should have implemented")
