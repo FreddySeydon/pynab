@@ -245,15 +245,27 @@ class NabIO(object, metaclass=abc.ABCMeta):
         self.cancel_event.clear()
         # Turn leds red while ears go to 0, 0
         await self.move_ears_with_leds((255, 0, 0), 0, 0)
-        preloaded_sig = await self._preload([signature])
-        preloaded_body = await self._preload(body)
+
+        # Preload all in parallel
+        preloaded_sig_task = self._preload([signature])
+        preloaded_body_task = self._preload(body)
+        preloaded_sig, preloaded_body = await asyncio.gather(
+            preloaded_sig_task, preloaded_body_task
+        )
+
         ci = ChoreographyInterpreter(self.leds, self.ears, self.sound)
+        # First signature
         await self._play_preloaded(
             ci, preloaded_sig, ChoreographyInterpreter.STREAMING_URN
         )
+        # Body
         await self._play_preloaded(
-            ci, preloaded_body, ChoreographyInterpreter.STREAMING_URN
+            ci,
+            preloaded_body,
+            ChoreographyInterpreter.STREAMING_URN,
+            keep_choreography=True,
         )
+        # Second signature
         await self._play_preloaded(
             ci, preloaded_sig, ChoreographyInterpreter.STREAMING_URN
         )
@@ -269,7 +281,9 @@ class NabIO(object, metaclass=abc.ABCMeta):
         ci = ChoreographyInterpreter(self.leds, self.ears, self.sound)
         await self._play_preloaded(ci, preloaded, None)
 
-    async def _play_preloaded(self, ci, preloaded, default_chor):
+    async def _play_preloaded(
+        self, ci, preloaded, default_chor, keep_choreography=False
+    ):
         for seq_item in preloaded:
             if self.cancel_event.is_set():
                 break
@@ -277,40 +291,57 @@ class NabIO(object, metaclass=abc.ABCMeta):
                 chor = seq_item["choreography"]
             else:
                 chor = default_chor
+
+            # Only start if different or not already running
             if chor is not None:
                 await ci.start(chor)
-            else:
+            elif not keep_choreography:
                 await ci.stop()
+
             if "audio" in seq_item:
                 await self.sound.play_list(
                     seq_item["audio"], True, self.cancel_event
                 )
-                if chor is not None:
-                    await ci.stop()
-            elif "choreography" in seq_item:
-                await ci.wait_until_complete(self.cancel_event)
+
+            # If not keeping choreography for the next part, stop it now
+            if chor is not None and not keep_choreography:
+                await ci.stop()
+        
+        if not keep_choreography:
+            await ci.stop()
 
     async def _preload(self, sequence):
+        # Flatten all audio resources to preload them in parallel
+        all_resources = []
+        for seq_item in sequence:
+            if "audio" in seq_item:
+                if isinstance(seq_item["audio"], str):
+                    all_resources.append(seq_item["audio"])
+                else:
+                    all_resources.extend(seq_item["audio"])
+
+        # Preload everything in parallel
+        preloaded_map = {}
+        if all_resources:
+            tasks = [self.sound.preload(res) for res in all_resources]
+            results = await asyncio.gather(*tasks)
+            for res, path in zip(all_resources, results):
+                preloaded_map[res] = path
+
+        # Reconstruct the sequence with preloaded paths
         preloaded_sequence = []
         for seq_item in sequence:
             if self.cancel_event.is_set():
                 break
-            if "audio" in seq_item:
-                preloaded_audio_list = []
-                if isinstance(seq_item["audio"], str):
-                    print(
-                        f"Warning: audio should be a list of resources "
-                        f"(sequence item: {seq_item})"
-                    )
-                    audio_list = [seq_item["audio"]]
+            new_item = seq_item.copy()
+            if "audio" in new_item:
+                if isinstance(new_item["audio"], str):
+                    new_item["audio"] = [preloaded_map[new_item["audio"]]]
                 else:
-                    audio_list = seq_item["audio"]
-                for res in audio_list:
-                    f = await self.sound.preload(res)
-                    if f is not None:
-                        preloaded_audio_list.append(f)
-                seq_item["audio"] = preloaded_audio_list
-            preloaded_sequence.append(seq_item)
+                    new_item["audio"] = [
+                        preloaded_map[res] for res in new_item["audio"]
+                    ]
+            preloaded_sequence.append(new_item)
         return preloaded_sequence
 
     async def cancel(self, feedback=False):

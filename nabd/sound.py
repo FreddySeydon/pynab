@@ -1,4 +1,5 @@
 import abc
+import asyncio
 
 from .resources import Resources
 
@@ -22,12 +23,15 @@ class Sound(object, metaclass=abc.ABCMeta):
         if preloaded:
             preloaded_list = filenames
         else:
-            for filename in filenames:
-                preloaded_file = await self.preload(filename)
-                if preloaded_file is not None:
-                    preloaded_list.append(preloaded_file)
+            # Preload in parallel
+            tasks = [self.preload(filename) for filename in filenames]
+            results = await asyncio.gather(*tasks)
+            preloaded_list = [f for f in results if f is not None]
+
         await self.stop_playing()
         for filename in preloaded_list:
+            if event and event.is_set():
+                break
             await self.start_playing_preloaded(filename)
             await self.wait_until_done(event)
 
