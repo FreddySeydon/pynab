@@ -211,7 +211,7 @@ class SoundAlsa(Sound):  # pragma: no cover
         device.setchannels(channels)
         device.setrate(rate)
 
-        device.setformat(SoundAlsa.__PCM_FORMAT_BY_WIDTH[width])
+        device.setformat(self._PCM_FORMAT_BY_WIDTH[width])
 
     async def stop_playing(self):
         if self.currently_playing:
@@ -356,7 +356,7 @@ class SoundAlsa(Sound):  # pragma: no cover
             self.executor, lambda f=filename: self._play(f)
         )
 
-    __PCM_FORMAT_BY_WIDTH = {
+    _PCM_FORMAT_BY_WIDTH = {
         1: alsaaudio.PCM_FORMAT_U8,  # 8bit is unsigned in wav files
         # Otherwise we assume signed data, little endian
         2: alsaaudio.PCM_FORMAT_S16_LE,

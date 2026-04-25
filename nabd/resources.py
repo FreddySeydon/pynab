@@ -48,11 +48,12 @@ class Resources(object):
         locale = await get_locale()
 
         for app in os.listdir(basepath):
-            if not os.path.isdir(app):
+            app_path = basepath.joinpath(app)
+            if not os.path.isdir(app_path):
                 continue
             for path in [
-                basepath.joinpath(app, type, locale, filename),
-                basepath.joinpath(app, type, filename),
+                app_path.joinpath(type, locale, filename),
+                app_path.joinpath(type, filename),
             ]:
                 if path.is_file():
                     return path
@@ -68,11 +69,12 @@ class Resources(object):
 
         filelist = []
         for app in os.listdir(basepath):
-            if not os.path.isdir(app):
+            app_path = basepath.joinpath(app)
+            if not os.path.isdir(app_path):
                 continue
             for path in [
-                basepath.joinpath(app, type, locale, parent),
-                basepath.joinpath(app, type, parent),
+                app_path.joinpath(type, locale, parent),
+                app_path.joinpath(type, parent),
             ]:
                 if path.is_dir():
                     filelist = filelist + list(path.glob(pattern))
