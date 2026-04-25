@@ -245,27 +245,15 @@ class NabIO(object, metaclass=abc.ABCMeta):
         self.cancel_event.clear()
         # Turn leds red while ears go to 0, 0
         await self.move_ears_with_leds((255, 0, 0), 0, 0)
-
-        # Preload all in parallel
-        preloaded_sig_task = self._preload([signature])
-        preloaded_body_task = self._preload(body)
-        preloaded_sig, preloaded_body = await asyncio.gather(
-            preloaded_sig_task, preloaded_body_task
-        )
-
+        preloaded_sig = await self._preload([signature])
+        preloaded_body = await self._preload(body)
         ci = ChoreographyInterpreter(self.leds, self.ears, self.sound)
-        # First signature
         await self._play_preloaded(
             ci, preloaded_sig, ChoreographyInterpreter.STREAMING_URN
         )
-        # Body
         await self._play_preloaded(
-            ci,
-            preloaded_body,
-            ChoreographyInterpreter.STREAMING_URN,
-            keep_choreography=True,
+            ci, preloaded_body, ChoreographyInterpreter.STREAMING_URN
         )
-        # Second signature
         await self._play_preloaded(
             ci, preloaded_sig, ChoreographyInterpreter.STREAMING_URN
         )
@@ -281,9 +269,7 @@ class NabIO(object, metaclass=abc.ABCMeta):
         ci = ChoreographyInterpreter(self.leds, self.ears, self.sound)
         await self._play_preloaded(ci, preloaded, None)
 
-    async def _play_preloaded(
-        self, ci, preloaded, default_chor, keep_choreography=False
-    ):
+    async def _play_preloaded(self, ci, preloaded, default_chor):
         for seq_item in preloaded:
             if self.cancel_event.is_set():
                 break
@@ -291,24 +277,18 @@ class NabIO(object, metaclass=abc.ABCMeta):
                 chor = seq_item["choreography"]
             else:
                 chor = default_chor
-
-            # Only start if different or not already running
             if chor is not None:
                 await ci.start(chor)
-            elif not keep_choreography:
+            else:
                 await ci.stop()
-
             if "audio" in seq_item:
                 await self.sound.play_list(
                     seq_item["audio"], True, self.cancel_event
                 )
-
-            # If not keeping choreography for the next part, stop it now
-            if chor is not None and not keep_choreography:
-                await ci.stop()
-        
-        if not keep_choreography:
-            await ci.stop()
+                if chor is not None:
+                    await ci.stop()
+            elif "choreography" in seq_item:
+                await ci.wait_until_complete(self.cancel_event)
 
     async def _preload(self, sequence):
         # Flatten all audio resources to preload them in parallel
@@ -334,7 +314,6 @@ class NabIO(object, metaclass=abc.ABCMeta):
         for seq_item in sequence:
             if self.cancel_event.is_set():
                 break
-            # Copy to avoid modifying original sequence objects
             new_item = seq_item.copy()
             if "audio" in new_item:
                 if isinstance(new_item["audio"], str):

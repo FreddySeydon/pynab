@@ -349,6 +349,48 @@ class SoundAlsa(Sound):  # pragma: no cover
                 dev.close()
         return True
 
+    @staticmethod
+    @functools.lru_cache()
+    def sound_configuration():
+        """
+        Returns the (as a triplet) the card's index (zero based), raw card
+        name and the device (playback or recording)
+        supported by the hardware as a unicode string.
+
+        @rtype: tuple
+
+        @postcondition: len(return) == 3
+        @postcondition: isinstnace(return[0], six.integer_types)
+        @postcondition: return[0] >= 0
+        @postcondition: return[1] in SoundAlsa.SOUND_CARDS_SUPPORTED
+        @postcondition: len(return[1]) > 0
+        @postcondition: isinstance(return[2], six.text_type)
+        @postcondition: len(return[2]) > 0
+
+        @raise RuntimeError: if no ALSO device could be found or if the
+        device found cannot be configured.
+        """
+        for idx, sound_card in enumerate(alsaaudio.cards()):
+            if sound_card in SoundAlsa.SOUND_CARDS_SUPPORTED:
+                device = f"plughw:CARD={sound_card}"
+
+                if not SoundAlsa.__test_device(device, False):
+                    raise RuntimeError(
+                        "Unable to configure sound card for playback"
+                    )
+
+                return idx, sound_card, device
+
+        raise RuntimeError(
+            "Sound card not found by ALSA (are drivers missing?)"
+        )
+
+    def get_sound_card(self):
+        """
+        Get the sound card for gestalt reporting.
+        """
+        return self.sound_card
+
     async def start_playing_preloaded(self, filename):
         await self.stop_playing()
         self.currently_playing = True
