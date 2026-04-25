@@ -76,16 +76,16 @@ class SoundAlsa(Sound):  # pragma: no cover
         return self._playback_pcm
 
     def _play_files(self, filenames, event=None):
-        device = None
         try:
-            device = alsaaudio.PCM(device=self.playback_device)
             for filename in filenames:
                 if not self.currently_playing:
                     break
                 if event and event.is_set():
                     break
 
+                device = None
                 try:
+                    device = alsaaudio.PCM(device=self.playback_device)
                     if (
                         filename.startswith("http://")
                         or filename.startswith("https://")
@@ -97,12 +97,13 @@ class SoundAlsa(Sound):  # pragma: no cover
                         self._play_mp3_file(device, filename)
                 except Exception as err:
                     logging.error(f"{filename}: {err}")
+                finally:
+                    if device:
+                        device.close()
         except Exception as e:
-            logging.error(f"Failed to open ALSA device or play sequence: {e}")
+            logging.error(f"Failed to play sequence: {e}")
         finally:
             self.currently_playing = False
-            if device:
-                device.close()
 
     def _play_wav_file(self, device, filename):
         with wave.open(filename, "rb") as f:
