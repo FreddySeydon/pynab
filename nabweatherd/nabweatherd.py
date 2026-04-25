@@ -2,327 +2,183 @@ import datetime
 import logging
 import random
 import sys
+import json
+from typing import Optional, Dict, Any
 
 from asgiref.sync import sync_to_async
 from dateutil import tz
-from meteofrance_api.client import MeteoFranceClient, Place
 
 from nabcommon.nabservice import NabInfoService
-from nabcommon.typing import NabdPacket
+from nabcommon.typing import NabdPacket, Animation
 
-from . import rfid_data
+from . import rfid_data, providers
 
 
 class NabWeatherd(NabInfoService):
-    class meteoError(Exception):
-        """Raise when errors occur while parsing data"""
-
     UNIT_CELSIUS = 1
-    UNIT_FARENHEIT = 2
+    UNIT_FAHRENHEIT = 2
 
-    # [25 {3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 0 0 0 0 0 0 0 0 0}] // soleil
-    SUNNY_INFO_ANIMATION = (
-        '{"tempo":25,"colors":['
-        '{"left":"ffff00","center":"ffff00","right":"ffff00"},'
-        '{"left":"ffff00","center":"ffff00","right":"ffff00"},'
-        '{"left":"ffff00","center":"ffff00","right":"ffff00"},'
-        '{"left":"ffff00","center":"ffff00","right":"ffff00"},'
-        '{"left":"ffff00","center":"ffff00","right":"ffff00"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"000000"}]}'
-    )
-
-    RAIN_ONE_HOUR = (
-        '{"tempo":16,"colors":['
-        '{"left":"00000","center":"003399","right":"000000"},'
-        '{"left":"003399","center":"000000","right":"003399"},'
-        '{"left":"00000","center":"00000","right":"000000"},'
-        '{"left":"00000","center":"003399","right":"000000"},'
-        '{"left":"003399","center":"000000","right":"003399"},'
-        '{"left":"00000","center":"00000","right":"000000"},'
-        '{"left":"00000","center":"00000","right":"000000"},'
-        '{"left":"00000","center":"00000","right":"000000"},'
-        '{"left":"00000","center":"00000","right":"000000"},'
-        '{"left":"00000","center":"00000","right":"000000"},'
-        '{"left":"00000","center":"00000","right":"000000"},'
-        '{"left":"00000","center":"00000","right":"000000"},'
-        '{"left":"00000","center":"003399","right":"000000"},'
-        '{"left":"003399","center":"000000","right":"003399"},'
-        '{"left":"00000","center":"00000","right":"000000"},'
-        '{"left":"00000","center":"003399","right":"000000"},'
-        '{"left":"003399","center":"000000","right":"003399"},'
-        '{"left":"000000","center":"000000","right":"000000"}]}'
-    )
-
-    # [125 {0 3 0 4 0 4}] // nuages
-    CLOUDY_INFO_ANIMATION = (
-        '{"tempo":125,"colors":['
-        '{"left":"000000","center":"ffff00","right":"000000"},'
-        '{"left":"0000ff","center":"000000","right":"0000ff"}]}'
-    )
-
-    WHITE_INFO_ANIMATION = (
-        '{"tempo":125,"colors":['
-        '{"left":"ffffff","center":"ffffff","right":"ffffff"},'
-        '{"left":"000000","center":"000000","right":"000000"}]}'
-    )
-
-    # [25 {4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 0 0 0}] // brouillard
-    FOGGY_INFO_ANIMATION = (
-        '{"tempo":25,"colors":['
-        '{"left":"0000ff","center":"0000ff","right":"0000ff"},'
-        '{"left":"0000ff","center":"0000ff","right":"0000ff"},'
-        '{"left":"0000ff","center":"0000ff","right":"0000ff"},'
-        '{"left":"0000ff","center":"0000ff","right":"0000ff"},'
-        '{"left":"0000ff","center":"0000ff","right":"0000ff"},'
-        '{"left":"000000","center":"000000","right":"000000"}]}'
-    )
-
-    # [20 {0 0 0 0 4 0 4 0 4 0 0 0 0 0 4 4 0 0 0 0 0 0 4 0 0 0 4}] // pluie
-    RAINY_INFO_ANIMATION = (
-        '{"tempo":20,"colors":['
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"0000ff","right":"000000"},'
-        '{"left":"0000ff","center":"000000","right":"0000ff"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"0000ff"},'
-        '{"left":"0000ff","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"0000ff"},'
-        '{"left":"000000","center":"0000ff","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"0000ff"}]}'
-    )
-
-    # [40 {4 0 0 0 0 0 0 0 4 0 0 0 0 4 0 0 0 0 0 0 4 0 0 0 0 4 0
-    #      0 0 0 4 0 0 0 0 0}] // neige
-    SNOWY_INFO_ANIMATION = (
-        '{"tempo":40,"colors":['
-        '{"left":"0000ff","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"0000ff"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"0000ff","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"0000ff"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"0000ff","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"0000ff","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"000000"}]}'
-    )
-
-    # [25 {0 4 3 0 0 0 0 0 0 0 0 0 0 0 0 4 3 0 0 4 3 0 0 0 0 0 0
-    #      0 3 4 3 4 0}] // orage
-    STORMY_INFO_ANIMATION = (
-        '{"tempo":25,"colors":['
-        '{"left":"000000","center":"0000ff","right":"ffff00"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"0000ff","center":"ffff00","right":"000000"},'
-        '{"left":"000000","center":"0000ff","right":"ffff00"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"000000","right":"000000"},'
-        '{"left":"000000","center":"ffff00","right":"0000ff"},'
-        '{"left":"ffff00","center":"0000ff","right":"000000"}]}'
-    )
-
-    # Météo France weather classes
-    WEATHER_CLASSES = {
-        "Eclaircies": ("sunny", SUNNY_INFO_ANIMATION),
-        "Peu nuageux": ("sunny", SUNNY_INFO_ANIMATION),
-        "Ensoleillé": ("sunny", SUNNY_INFO_ANIMATION),
-        "Ciel voilé": ("cloudy", CLOUDY_INFO_ANIMATION),
-        "Ciel voilé nuit": ("cloudy", CLOUDY_INFO_ANIMATION),
-        "Très nuageux": ("cloudy", CLOUDY_INFO_ANIMATION),
-        "Couvert": ("cloudy", CLOUDY_INFO_ANIMATION),
-        "Rares averses": (
-            "rainy",
-            RAINY_INFO_ANIMATION,
-        ),
-        "Averses": (
-            "rainy",
-            RAINY_INFO_ANIMATION,
-        ),
-        "Pluies éparses": (
-            "rainy",
-            RAINY_INFO_ANIMATION,
-        ),
-        "Pluie": (
-            "rainy",
-            RAINY_INFO_ANIMATION,
-        ),
-        "Pluie modérée": (
-            "rainy",
-            RAINY_INFO_ANIMATION,
-        ),
-        "Pluie faible": (
-            "rainy",
-            RAINY_INFO_ANIMATION,
-        ),
-        "Pluie forte": (
-            "rainy",
-            RAINY_INFO_ANIMATION,
-        ),
-        "Risque de grêle": ("rainy", RAINY_INFO_ANIMATION),
-        "Risque de grèle": ("rainy", RAINY_INFO_ANIMATION),
-        "Bruine / Pluie faible": ("rainy", RAINY_INFO_ANIMATION),
-        "Bruine": ("rainy", RAINY_INFO_ANIMATION),
-        "Pluies éparses / Rares averses": ("rainy", RAINY_INFO_ANIMATION),
-        "Pluie / Averses": ("rainy", RAINY_INFO_ANIMATION),
-        "Pluie et neige mêlées": (
-            "snowy",
-            SNOWY_INFO_ANIMATION,
-        ),
-        "Neige / Averses de neige": (
-            "snowy",
-            SNOWY_INFO_ANIMATION,
-        ),
-        "Neige": (
-            "snowy",
-            SNOWY_INFO_ANIMATION,
-        ),
-        "Averses de neige": (
-            "snowy",
-            SNOWY_INFO_ANIMATION,
-        ),
-        "Neige forte": (
-            "snowy",
-            SNOWY_INFO_ANIMATION,
-        ),
-        "Quelques flocons": (
-            "snowy",
-            SNOWY_INFO_ANIMATION,
-        ),
-        "Pluie et neige": (
-            "snowy",
-            SNOWY_INFO_ANIMATION,
-        ),
-        "Pluie verglaçante": (
-            "snowy",
-            SNOWY_INFO_ANIMATION,
-        ),
-        "Brume ou bancs de brouillard": (
-            "foggy",
-            FOGGY_INFO_ANIMATION,
-        ),
-        "Bancs de Brouillard": (
-            "foggy",
-            FOGGY_INFO_ANIMATION,
-        ),
-        "Brouillard": (
-            "foggy",
-            FOGGY_INFO_ANIMATION,
-        ),
-        "Brouillard givrant": (
-            "foggy",
-            FOGGY_INFO_ANIMATION,
-        ),
-        "Brume": (
-            "foggy",
-            FOGGY_INFO_ANIMATION,
-        ),
-        "Pluies orageuses": ("stormy", STORMY_INFO_ANIMATION),
-        "Pluie orageuses": ("stormy", STORMY_INFO_ANIMATION),
-        "Orages": ("stormy", STORMY_INFO_ANIMATION),
-        "Averses orageuses": ("stormy", STORMY_INFO_ANIMATION),
-        "Risque d'orages": ("stormy", STORMY_INFO_ANIMATION),
+    ANIMATIONS = {
+        "sunny": {"tempo": 25, "colors": [{"left": "ffff00", "center": "ffff00", "right": "ffff00"}] * 5 + [{"left": "000000", "center": "000000", "right": "000000"}] * 3},
+        "cloudy": {"tempo": 125, "colors": [{"left": "000000", "center": "ffff00", "right": "000000"}, {"left": "0000ff", "center": "000000", "right": "0000ff"}]},
+        "rainy": {"tempo": 20, "colors": [{"left": "000000", "center": "000000", "right": "000000"}, {"left": "000000", "center": "0000ff", "right": "000000"}, {"left": "0000ff", "center": "000000", "right": "0000ff"}]},
+        "snowy": {"tempo": 40, "colors": [{"left": "0000ff", "center": "000000", "right": "000000"}, {"left": "000000", "center": "000000", "right": "0000ff"}]},
+        "foggy": {"tempo": 25, "colors": [{"left": "0000ff", "center": "0000ff", "right": "0000ff"}] * 5 + [{"left": "000000", "center": "000000", "right": "000000"}]},
+        "stormy": {"tempo": 25, "colors": [{"left": "000000", "center": "0000ff", "right": "ffff00"}, {"left": "000000", "center": "000000", "right": "000000"}]},
     }
 
-    weather_bedtime_done = False
-    weather_wakeup_done = False
+    RAIN_ANIMATION = {"tempo": 16, "colors": [{"left": "000000", "center": "003399", "right": "000000"}, {"left": "003399", "center": "000000", "right": "003399"}]}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.provider = providers.OpenMeteoProvider()
+        self.weather_bedtime_done = False
+        self.weather_wakeup_done = False
+
+    async def fetch_info_data(self, config_t) -> Optional[Dict[str, Any]]:
+        location = config_t[0]
+        if not location or "lat" not in location:
+            return None
+
+        # Fetch from provider
+        forecast = await self.provider.get_forecast(location["lat"], location["lon"])
+        if not forecast:
+            return None
+
+        return {
+            "weather_animation_type": config_t[2],
+            "today": forecast["today"],
+            "tomorrow": forecast["tomorrow"]
+        }
+
+    def get_animation(self, info_data) -> Optional[Dict[str, Any]]:
+        if not info_data:
+            return None
+
+        anim_type = info_data["weather_animation_type"]
+        
+        # Handle Rain info separately (info_id: nabweatherd_rain)
+        if anim_type in ["weather_and_rain", "rain_only"]:
+            rain_packet = {"type": "info", "info_id": "nabweatherd_rain"}
+            if info_data["today"]["rain"]:
+                rain_packet["animation"] = self.RAIN_ANIMATION
+            self.write_packet(rain_packet)
+
+        # Main weather animation
+        if anim_type in ["weather_and_rain", "weather_only"]:
+            if anim_type == "weather_only":
+                self.write_packet({"type": "info", "info_id": "nabweatherd_rain"}) # Remove rain
+            
+            weather_class = info_data["today"]["class"]
+            return self.ANIMATIONS.get(weather_class)
+
+        if anim_type == "nothing":
+            self.write_packet({"type": "info", "info_id": "nabweatherd_rain"})
+            return None
+        
+        return None
+
+    async def perform_additional(self, expiration, type, info_data, config_t):
+        if not info_data:
+            logging.error("Weather data unavailable for vocal performance")
+            return
+
+        unit = config_t[1]
+        forecast = info_data[type]
+        weather_class = forecast["class"]
+        temp = forecast["temp"]
+
+        unit_sound = "degree.mp3"
+        if unit == self.UNIT_FAHRENHEIT:
+            temp = round(temp * 1.8 + 32.0)
+            unit_sound = "degree_f.mp3"
+
+        # Construct the message sequence
+        body_audio = [
+            f"nabweatherd/{type}.mp3",
+            f"nabweatherd/sky/{weather_class}.mp3",
+            f"nabweatherd/temp/{temp}.mp3",
+            f"nabweatherd/{unit_sound}"
+        ]
+
+        await self.send_message(
+            signature_audio=["nabweatherd/signature.mp3"],
+            body_audio=body_audio,
+            expiration=expiration
+        )
+
+    async def send_message(self, signature_audio, body_audio, expiration):
+        packet = {
+            "type": "message",
+            "signature": {"audio": signature_audio},
+            "body": [{"audio": body_audio}],
+            "expiration": expiration.isoformat()
+        }
+        self.write_packet(packet)
+        await self.writer.drain()
 
     async def perform(self, expiration, args, config):
-
-        weather_forecast = "today"
-
-        await NabInfoService.perform(self, expiration, args, config)
-
-        (
-            location,
-            unit,
-            weather_animation_type,
-            weather_frequency,
-            next_performance_weather_vocal_date,
-            next_performance_weather_vocal_flag,
-        ) = config
-
+        await super().perform(expiration, args, config)
+        
+        # Check if we need to perform random vocal forecast
+        next_vocal_date = config[4]
+        next_vocal_flag = config[5]
+        
         current_tz = self.get_system_tz()
         now = datetime.datetime.now(tz=tz.gettz(current_tz))
 
-        if (
-            next_performance_weather_vocal_flag
-            and next_performance_weather_vocal_date < now
-        ):
-            logging.debug("performing random weather forecast")
-
-            if now.hour > 18:
-                weather_forecast = "tomorrow"
-            else:
-                weather_forecast = "today"
-
-            await self._do_perform_additional(config, weather_forecast)
+        if next_vocal_flag and next_vocal_date and next_vocal_date < now:
+            forecast_type = "tomorrow" if now.hour > 18 else "today"
+            await self._do_perform_additional(config, forecast_type)
+            
+            # Reset flag
             from . import models
+            config_m = await models.Config.load_async()
+            config_m.next_performance_weather_vocal_flag = 0
+            await config_m.save_async()
 
-            config_t = await models.Config.load_async()
-            config_t.next_performance_weather_vocal_flag = False
-            await config_t.save_async()
+    def get_system_tz(self):
+        try:
+            with open("/etc/timezone") as f:
+                return f.read().strip()
+        except:
+            return "UTC"
 
-        if weather_frequency == 3:
-            from nabclockd import models as clock_models
+    async def _do_perform_additional(self, config, type):
+        info_data = await self.fetch_info_data(config)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        expiration = now + datetime.timedelta(minutes=2)
+        await self.perform_additional(expiration, type, info_data, config)
 
-            clock_config = await clock_models.Config.load_async()
+    async def process_nabd_packet(self, packet: NabdPacket):
+        if packet["type"] == "asr_event" and packet["nlu"]["intent"] == "nabweatherd/forecast":
+            # Logic for today vs tomorrow based on NLU date if available
+            target = "today"
+            if "date" in packet["nlu"]:
+                if packet["nlu"]["date"][:10] != datetime.datetime.now().strftime("%Y-%m-%d"):
+                    target = "tomorrow"
+            await self._trigger_vocal(target)
 
-            bedtime = datetime.datetime(
-                now.year,
-                now.month,
-                now.day,
-                clock_config.sleep_hour,
-                clock_config.sleep_min,
-                tzinfo=tz.gettz(current_tz),
-            )
-            wakeup = datetime.datetime(
-                now.year,
-                now.month,
-                now.day,
-                clock_config.wakeup_hour,
-                clock_config.wakeup_min,
-                tzinfo=tz.gettz(current_tz),
-            )
+        elif packet["type"] == "rfid_event" and packet["app"] == "nabweatherd" and packet["event"] == "detected":
+            target = rfid_data.unserialize(packet["data"].encode("utf8")) if "data" in packet else "today"
+            await self._trigger_vocal(target)
 
-            just_before_bedtime = bedtime + datetime.timedelta(minutes=-5)
-            just_after_wakeup = wakeup + datetime.timedelta(minutes=5)
-
-            if now < just_after_wakeup and now > wakeup:
-                weather_forecast = "today"
-                if not self.weather_wakeup_done:
-                    await self._do_perform_additional(config, weather_forecast)
-                    self.weather_wakeup_done = True
-                    from . import models
-
-                    config_t = await models.Config.load_async()
-                    config_t.next_performance_weather_vocal_flag = False
-                    await config_t.save_async()
-            else:
-                self.weather_wakeup_done = False
-
-            if now > just_before_bedtime and now < bedtime:
-                weather_forecast = "tomorrow"
-                if not self.weather_bedtime_done:
-                    await self._do_perform_additional(config, weather_forecast)
-                    self.weather_bedtime_done = True
-                    from . import models
-
-                    config_t = await models.Config.load_async()
-                    config_t.next_performance_weather_vocal_flag = False
-                    await config_t.save_async()
-            else:
-                self.weather_bedtime_done = False
+    async def _trigger_vocal(self, type):
+        from . import models
+        config_m = await models.Config.load_async()
+        # Pack config exactly as perform/fetch_info_data expects it
+        config_t = (
+            config_m.location,
+            config_m.unit,
+            config_m.weather_animation_type,
+            config_m.weather_frequency,
+            config_m.next_performance_weather_vocal_date,
+            config_m.next_performance_weather_vocal_flag,
+        )
+        await self._do_perform_additional(config_t, type)
 
     async def get_config(self):
         from . import models
-
         config = await models.Config.load_async()
         return (
             config.next_performance_date,
@@ -336,273 +192,6 @@ class NabWeatherd(NabInfoService):
                 config.next_performance_weather_vocal_flag,
             ),
         )
-
-    async def update_next(self, next_date, next_args):
-        from . import models
-
-        config = await models.Config.load_async()
-        config.next_performance_date = next_date
-        config.next_performance_type = next_args
-
-        current_tz = self.get_system_tz()
-        now = datetime.datetime.now(tz=tz.gettz(current_tz))
-
-        if not config.next_performance_weather_vocal_flag:
-            # every hour approx
-            if config.weather_frequency == 1:
-                minutes = random.randint(40, 70)  # nosec B311
-                config.next_performance_weather_vocal_date = (
-                    now + datetime.timedelta(minutes=minutes)
-                )
-                logging.debug(
-                    "update_next / next_performance_weather_vocal"
-                    f"={config.next_performance_weather_vocal_date}"
-                )
-                config.next_performance_weather_vocal_flag = True
-
-            elif config.weather_frequency == 2:
-                minutes = random.randint(100, 190)  # nosec B311
-                config.next_performance_weather_vocal_date = (
-                    now + datetime.timedelta(minutes=minutes)
-                )
-                logging.debug(
-                    "update_next / next_performance_weather_vocal"
-                    f"={config.next_performance_weather_vocal_date}"
-                )
-                config.next_performance_weather_vocal_flag = True
-
-            elif config.weather_frequency == 3:
-                config.next_performance_weather_vocal_date = None
-                config.next_performance_weather_vocal_flag = False
-
-        await config.save_async()
-
-    def get_system_tz(self):
-        with open("/etc/timezone") as w:
-            return w.read().strip()
-
-    def next_info_update(self, config):
-        if config is None:
-            return None
-        now = datetime.datetime.now(datetime.timezone.utc)
-        next_5mn = now + datetime.timedelta(seconds=300)
-        return next_5mn
-
-    async def fetch_info_data(self, config_t):
-        from . import models  # noqa
-
-        (
-            location,
-            unit,
-            weather_animation_type,
-            weather_frequency,
-            next_performance_weather_vocal_date,
-            next_performance_weather_vocal_flag,
-        ) = config_t
-
-        if location is None:
-            return None
-
-        place = Place(location)
-
-        client = await sync_to_async(MeteoFranceClient)()
-        try:
-            my_place_weather_forecast = client.get_forecast_for_place(place)
-            data = my_place_weather_forecast.daily_forecast
-            logging.debug(f"data: {data}")
-        except Exception as err:
-            logging.error(f"{err}")
-            return None
-
-        # Rain info
-        next_rain = False
-        try:
-            raininfo = client.get_rain(place.latitude, place.longitude)
-            logging.debug(f"rain forecast: {raininfo.forecast}")
-            for five_min_slots in raininfo.forecast:
-                if five_min_slots["rain"] != 1:
-                    next_rain = True
-                    break
-        except Exception as err:
-            logging.error(f"{err}")
-            next_rain = False
-            # todo : prevenir que les infos de rain ne sont pas dispo
-
-        current_weather_class = self.normalize_weather_class(
-            data[0]["weather12H"]["desc"]
-        )
-        today_forecast_weather_class = self.normalize_weather_class(
-            data[0]["weather12H"]["desc"]
-        )
-
-        today_forecast_max_temp = int(data[0]["T"]["max"])
-
-        tomorrow_forecast_weather_class = self.normalize_weather_class(
-            data[1]["weather12H"]["desc"]
-        )
-        tomorrow_forecast_max_temp = int(data[0]["T"]["max"])
-
-        return {
-            "weather_animation_type": weather_animation_type,
-            "current_weather_class": current_weather_class,
-            "next_rain": next_rain,
-            "today_forecast_weather_class": today_forecast_weather_class,
-            "today_forecast_max_temp": today_forecast_max_temp,
-            "tomorrow_forecast_weather_class": tomorrow_forecast_weather_class,
-            "tomorrow_forecast_max_temp": tomorrow_forecast_max_temp,
-        }
-
-    def normalize_weather_class(self, weather_class):
-        if weather_class in NabWeatherd.WEATHER_CLASSES:
-            return weather_class
-        logging.warning(f"unexpected weather class: {weather_class}")
-        return None
-
-    def get_animation(self, info_data):
-
-        if info_data is None:
-            return
-
-        logging.debug(f"get_animation: {info_data['weather_animation_type']}")
-
-        # Rain
-        if (info_data["weather_animation_type"] == "weather_and_rain") or (
-            info_data["weather_animation_type"] == "rain_only"
-        ):
-
-            if info_data["next_rain"] is True:
-                packet = (
-                    '{"type":"info",'
-                    '"info_id":"nabweatherd_rain",'
-                    '"animation":' + self.RAIN_ONE_HOUR + "}\r\n"
-                )
-            else:
-                packet = '{"type":"info",' '"info_id":"nabweatherd_rain"}\r\n'
-            self.writer.write(packet.encode("utf8"))
-
-        # Weather
-        if (info_data["weather_animation_type"] == "weather_and_rain") or (
-            (info_data["weather_animation_type"] == "weather_only")
-        ):
-
-            # si weather on supprime l'animation rain
-            if info_data["weather_animation_type"] == "weather_only":
-                packet = '{"type":"info",' '"info_id":"nabweatherd_rain"}\r\n'
-                self.writer.write(packet.encode("utf8"))
-
-            (weather_class, info_animation) = NabWeatherd.WEATHER_CLASSES[
-                info_data["today_forecast_weather_class"]
-            ]
-            return info_animation
-
-        if info_data["weather_animation_type"] == "nothing":
-            # Return mais avant on supprime l'animation rain
-            packet = '{"type":"info",' '"info_id":"nabweatherd_rain"}\r\n'
-            self.writer.write(packet.encode("utf8"))
-            logging.debug("get_animation: no visual information")
-            return None
-
-    async def perform_additional(self, expiration, type, info_data, config_t):
-        (
-            location,
-            unit,
-            weather_animation_type,
-            weather_frequency,
-            next_performance_weather_vocal_date,
-            next_performance_weather_vocal_local,
-        ) = config_t
-        if location is None:
-            logging.debug("No location (service is unconfigured)")
-            packet = (
-                '{"type":"message",'
-                '"signature":{"audio":['
-                '"nabweatherd/signature.mp3"]},'
-                '"body":[{"audio":["nabweatherd/no-location-error.mp3"]}],'
-                '"expiration":"' + expiration.isoformat() + '"}\r\n'
-            )
-            self.writer.write(packet.encode("utf8"))
-        elif info_data is None:
-            logging.debug("No data available")
-            packet = (
-                '{"type":"message",'
-                '"signature":{"audio":['
-                '"nabweatherd/signature.mp3"]},'
-                '"body":[{"audio":["nabweatherd/no-data-error.mp3"]}],'
-                '"expiration":"' + expiration.isoformat() + '"}\r\n'
-            )
-            self.writer.write(packet.encode("utf8"))
-        else:
-            if type == "today":
-                (weather_class, info_animation) = NabWeatherd.WEATHER_CLASSES[
-                    info_data["today_forecast_weather_class"]
-                ]
-                max_temp = info_data["today_forecast_max_temp"]
-            elif type == "tomorrow":
-                (weather_class, info_animation) = NabWeatherd.WEATHER_CLASSES[
-                    info_data["tomorrow_forecast_weather_class"]
-                ]
-                max_temp = info_data["tomorrow_forecast_max_temp"]
-            else:
-                logging.debug(f"Unknown type {type}")
-                return
-            unit_sound_file = "degree.mp3"
-            if unit == NabWeatherd.UNIT_FARENHEIT:
-                max_temp = round(max_temp * 1.8 + 32.0)
-                unit_sound_file = "degree_f.mp3"
-
-            packet = (
-                '{"type":"message",'
-                '"signature":{"audio":["nabweatherd/signature.mp3"]},'
-                '"body":[{"audio":["nabweatherd/' + type + '.mp3",'
-                '"nabweatherd/sky/' + weather_class + '.mp3",'
-                '"nabweatherd/temp/' + str(max_temp) + '.mp3",'
-                '"nabweatherd/' + unit_sound_file + '"]}],'
-                '"expiration":"' + expiration.isoformat() + '"}\r\n'
-            )
-            self.writer.write(packet.encode("utf8"))
-        await self.writer.drain()
-
-    async def _do_perform(self, type):
-        next_date, next_args, config_t = await self.get_config()
-        now = datetime.datetime.now(datetime.timezone.utc)
-        expiration = now + datetime.timedelta(minutes=1)
-        await self.perform(expiration, type, config_t)
-
-    async def _do_perform_additional(self, config, type):
-
-        info_data = await self.fetch_info_data(config)
-
-        now = datetime.datetime.now(datetime.timezone.utc)
-        expiration = now + datetime.timedelta(minutes=1)
-
-        await self.perform_additional(expiration, type, info_data, config)
-
-    async def process_nabd_packet(self, packet: NabdPacket):
-
-        if (
-            packet["type"] == "asr_event"
-            and packet["nlu"]["intent"] == "nabweatherd/forecast"
-        ):
-            if "date" in packet["nlu"] and packet["nlu"]["date"][
-                :10
-            ] != datetime.datetime.now().strftime("%Y-%m-%d"):
-                type = "tomorrow"
-            else:
-                type = "today"
-            logging.debug(f"ASR triggered forecast for {type}")
-            await self._do_perform(type)
-        elif (
-            packet["type"] == "rfid_event"
-            and packet["app"] == "nabweatherd"
-            and packet["event"] == "detected"
-        ):
-            if "data" in packet:
-                type = rfid_data.unserialize(packet["data"].encode("utf8"))
-            else:
-                type = "today"
-            logging.debug(f"RFID triggered forecast for {type}")
-            await self._do_perform(type)
-
 
 if __name__ == "__main__":
     NabWeatherd.main(sys.argv[1:])
