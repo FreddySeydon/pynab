@@ -86,8 +86,10 @@ class RfidDev(Rfid):  # pragma: no cover
             os.write(self.__fd, b"p")
 
     def _start_timer(self):
-        self.__polling_timer = Timer(RfidDev.POLLING_TIMEOUT, self._timer_cb)
-        self.__polling_timer.start()
+        self._cancel_timer()
+        self.__polling_timer = asyncio.get_event_loop().call_later(
+            RfidDev.POLLING_TIMEOUT, self._timer_cb
+        )
 
     def _cancel_timer(self):
         if self.__polling_timer:

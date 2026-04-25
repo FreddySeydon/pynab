@@ -1,3 +1,5 @@
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from rpi_ws281x import Adafruit_NeoPixel, Color  # type: ignore
 
 from .leds import LedsSoft
@@ -28,6 +30,7 @@ class LedsNeoPixel(LedsSoft):  # pragma: no cover
         )
         # Intialize the library (must be called once before other functions).
         self.strip.begin()
+        self.executor = ThreadPoolExecutor(max_workers=1)
 
     def do_set(self, led, red, green, blue):
         # NeoPixel indexes on the strip do match the (original) values
@@ -35,4 +38,6 @@ class LedsNeoPixel(LedsSoft):  # pragma: no cover
         self.strip.setPixelColor(led_ix, Color(red, green, blue))
 
     def do_show(self):
-        self.strip.show()
+        # show() is blocking and timing-sensitive. 
+        # Offload to a background thread so we don't stutter the asyncio loop.
+        asyncio.get_event_loop().run_in_executor(self.executor, self.strip.show)

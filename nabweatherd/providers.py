@@ -1,6 +1,7 @@
 import abc
 import logging
-import aiohttp
+import requests
+import asyncio
 from typing import Optional, Dict, Any
 
 class WeatherProvider(abc.ABC):
@@ -10,7 +11,7 @@ class WeatherProvider(abc.ABC):
         pass
 
 class OpenMeteoProvider(WeatherProvider):
-    # Free, no-key, global, asyncio-friendly
+    # Free, no-key, global, asyncio-friendly (via run_in_executor)
     URL = "https://api.open-meteo.com/v1/forecast"
 
     async def get_forecast(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
@@ -22,36 +23,37 @@ class OpenMeteoProvider(WeatherProvider):
             "forecast_days": 2
         }
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(self.URL, params=params) as resp:
-                    if resp.status != 200:
-                        logging.error(f"OpenMeteo error: {resp.status}")
-                        return None
-                    data = await resp.json()
-                    
-                    # Map WMO codes to Nabaztag weather classes
-                    # https://open-meteo.com/en/docs
-                    today_code = data["daily"]["weather_code"][0]
-                    tomorrow_code = data["daily"]["weather_code"][1]
-                    
-                    return {
-                        "today": {
-                            "class": self._map_code(today_code),
-                            "temp": int(data["daily"]["temperature_2m_max"][0]),
-                            "rain": data["daily"]["precipitation_probability_max"][0] > 30
-                        },
-                        "tomorrow": {
-                            "class": self._map_code(tomorrow_code),
-                            "temp": int(data["daily"]["temperature_2m_max"][1]),
-                            "rain": data["daily"]["precipitation_probability_max"][1] > 30
-                        }
-                    }
+            loop = asyncio.get_event_loop()
+            resp = await loop.run_in_executor(None, lambda: requests.get(self.URL, params=params, timeout=10))
+            
+            if resp.status_code != 200:
+                logging.error(f"OpenMeteo error: {resp.status_code}")
+                return None
+            
+            data = resp.json()
+            
+            # Map WMO codes to Nabaztag weather classes
+            today_code = data["daily"]["weather_code"][0]
+            tomorrow_code = data["daily"]["weather_code"][1]
+            
+            return {
+                "today": {
+                    "class": self._map_code(today_code),
+                    "temp": int(data["daily"]["temperature_2m_max"][0]),
+                    "rain": data["daily"]["precipitation_probability_max"][0] > 30
+                },
+                "tomorrow": {
+                    "class": self._map_code(tomorrow_code),
+                    "temp": int(data["daily"]["temperature_2m_max"][1]),
+                    "rain": data["daily"]["precipitation_probability_max"][1] > 30
+                }
+            }
         except Exception as e:
             logging.error(f"OpenMeteo exception: {e}")
             return None
 
     def _map_code(self, code: int) -> str:
-        # Simplified mapping to basic weather classes
+        # Map codes to existing audio files in sounds/nabweatherd/sky/
         if code == 0: return "sunny"
         if code in [1, 2, 3]: return "cloudy"
         if code in [45, 48]: return "foggy"
