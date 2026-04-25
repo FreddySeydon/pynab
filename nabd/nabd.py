@@ -125,21 +125,27 @@ class Nabd:
         self.playing_cancelable = False
         self.playing_request_id: Optional[str] = None
         Nabd.leds_boot(self.nabio, 2)
+        self.asr: Optional[ASR] = None
+        self.nlu: Optional[NLU] = None
+        self._asr_locale: Optional[str] = None
+        self._nlu_locale: Optional[str] = None
         if self.nabio.has_sound_input():
-            from . import i18n
-            from .asr import ASR
-            from .nlu import NLU
-
-            config = i18n.Config.load()
-            self._asr_locale = ASR.get_locale(config.locale)
-            self.asr: Optional[ASR] = ASR(self._asr_locale)
-            Nabd.leds_boot(self.nabio, 3)
-            self._nlu_locale = NLU.get_locale(config.locale)
-            self.nlu: Optional[NLU] = NLU(self._nlu_locale)
-            Nabd.leds_boot(self.nabio, 4)
+            self.loop.create_task(self._init_asr_nlu())
         else:
-            self.asr = None
-            self.nlu = None
+            Nabd.leds_boot(self.nabio, 4)
+
+    async def _init_asr_nlu(self):
+        from . import i18n
+        from .asr import ASR
+        from .nlu import NLU
+
+        config = await i18n.Config.load_async()
+        self._asr_locale = ASR.get_locale(config.locale)
+        self.asr = ASR(self._asr_locale)
+        Nabd.leds_boot(self.nabio, 3)
+        self._nlu_locale = NLU.get_locale(config.locale)
+        self.nlu = NLU(self._nlu_locale)
+        Nabd.leds_boot(self.nabio, 4)
 
     async def reload_config(self):
         """
@@ -183,7 +189,7 @@ class Nabd:
             # not even a local network connection: real bad
             logging.error("no network connection")
             self.nabio.pulse(Led.BOTTOM, (255, 0, 0))  # Red
-        elif not network.internet_connection():
+        elif not await network.internet_connection():
             # local network connection, but no Internet access: not so good
             logging.warning("no Internet access")
             self.nabio.pulse(Led.BOTTOM, (255, 165, 0))  # Orange

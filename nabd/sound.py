@@ -28,12 +28,7 @@ class Sound(object, metaclass=abc.ABCMeta):
             results = await asyncio.gather(*tasks)
             preloaded_list = [f for f in results if f is not None]
 
-        await self.stop_playing()
-        for filename in preloaded_list:
-            if event and event.is_set():
-                break
-            await self.start_playing_preloaded(filename)
-            await self.wait_until_done(event)
+        await self.start_playing_list_preloaded(preloaded_list, event)
 
     async def start_playing(self, audio_resource):
         preloaded = await self.preload(audio_resource)
@@ -44,6 +39,14 @@ class Sound(object, metaclass=abc.ABCMeta):
     async def start_playing_preloaded(self, filename):
         """
         Start to play a given sound.
+        Stop currently playing sound if any.
+        """
+        raise NotImplementedError("Should have implemented")
+
+    @abc.abstractmethod
+    async def start_playing_list_preloaded(self, filenames, event=None):
+        """
+        Start to play a list of given sounds.
         Stop currently playing sound if any.
         """
         raise NotImplementedError("Should have implemented")

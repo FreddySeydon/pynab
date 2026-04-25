@@ -75,21 +75,30 @@ class SoundAlsa(Sound):  # pragma: no cover
                 logging.error(f"Failed to open ALSA device: {e}")
         return self._playback_pcm
 
-    def _play(self, filename):
+    def _play_files(self, filenames, event=None):
         device = None
         try:
             device = alsaaudio.PCM(device=self.playback_device)
-            if (
-                filename.startswith("http://")
-                or filename.startswith("https://")
-            ) and filename.endswith(".mp3"):
-                self._stream_mp3(device, filename)
-            elif filename.endswith(".wav"):
-                self._play_wav_file(device, filename)
-            elif filename.endswith(".mp3"):
-                self._play_mp3_file(device, filename)
-        except Exception as err:
-            logging.error(f"{filename}: {err}")
+            for filename in filenames:
+                if not self.currently_playing:
+                    break
+                if event and event.is_set():
+                    break
+
+                try:
+                    if (
+                        filename.startswith("http://")
+                        or filename.startswith("https://")
+                    ) and filename.endswith(".mp3"):
+                        self._stream_mp3(device, filename)
+                    elif filename.endswith(".wav"):
+                        self._play_wav_file(device, filename)
+                    elif filename.endswith(".mp3"):
+                        self._play_mp3_file(device, filename)
+                except Exception as err:
+                    logging.error(f"{filename}: {err}")
+        except Exception as e:
+            logging.error(f"Failed to open ALSA device or play sequence: {e}")
         finally:
             self.currently_playing = False
             if device:
@@ -395,7 +404,14 @@ class SoundAlsa(Sound):  # pragma: no cover
         await self.stop_playing()
         self.currently_playing = True
         self.future = asyncio.get_event_loop().run_in_executor(
-            self.executor, lambda f=filename: self._play(f)
+            self.executor, lambda: self._play_files([filename])
+        )
+
+    async def start_playing_list_preloaded(self, filenames, event=None):
+        await self.stop_playing()
+        self.currently_playing = True
+        self.future = asyncio.get_event_loop().run_in_executor(
+            self.executor, lambda: self._play_files(filenames, event)
         )
 
     _PCM_FORMAT_BY_WIDTH = {
