@@ -326,20 +326,25 @@ class NabIO(object, metaclass=abc.ABCMeta):
             tasks = [self.sound.preload(res) for res in all_resources]
             results = await asyncio.gather(*tasks)
             for res, path in zip(all_resources, results):
-                preloaded_map[res] = path
+                if path is not None:
+                    preloaded_map[res] = path
 
         # Reconstruct the sequence with preloaded paths
         preloaded_sequence = []
         for seq_item in sequence:
             if self.cancel_event.is_set():
                 break
+            # Copy to avoid modifying original sequence objects
             new_item = seq_item.copy()
             if "audio" in new_item:
                 if isinstance(new_item["audio"], str):
-                    new_item["audio"] = [preloaded_map[new_item["audio"]]]
+                    path = preloaded_map.get(new_item["audio"])
+                    new_item["audio"] = [path] if path else []
                 else:
                     new_item["audio"] = [
-                        preloaded_map[res] for res in new_item["audio"]
+                        preloaded_map[res]
+                        for res in new_item["audio"]
+                        if res in preloaded_map
                     ]
             preloaded_sequence.append(new_item)
         return preloaded_sequence

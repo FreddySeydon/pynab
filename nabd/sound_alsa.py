@@ -29,6 +29,7 @@ class SoundAlsa(Sound):  # pragma: no cover
         self.record_device = "null"
         self.record_mixer = None
         self._recorded_raw = None
+        self._playback_pcm = None
 
         try:
             (
@@ -66,47 +67,13 @@ class SoundAlsa(Sound):  # pragma: no cover
         self.currently_playing = False
         self.currently_recording = False
 
-    @staticmethod
-    @functools.lru_cache()
-    def sound_configuration():
-        """
-        Returns the (as a triplet) the card's index (zero based), raw card
-        name and the device (playback or recording)
-        supported by the hardware as a unicode string.
-
-        @rtype: tuple
-
-        @postcondition: len(return) == 3
-        @postcondition: isinstnace(return[0], six.integer_types)
-        @postcondition: return[0] >= 0
-        @postcondition: return[1] in SoundAlsa.SOUND_CARDS_SUPPORTED
-        @postcondition: len(return[1]) > 0
-        @postcondition: isinstance(return[2], six.text_type)
-        @postcondition: len(return[2]) > 0
-
-        @raise RuntimeError: if no ALSO device could be found or if the
-        device found cannot be configured.
-        """
-        for idx, sound_card in enumerate(alsaaudio.cards()):
-            if sound_card in SoundAlsa.SOUND_CARDS_SUPPORTED:
-                device = f"plughw:CARD={sound_card}"
-
-                if not SoundAlsa.__test_device(device, False):
-                    raise RuntimeError(
-                        "Unable to configure sound card for playback"
-                    )
-
-                return idx, sound_card, device
-
-        raise RuntimeError(
-            "Sound card not found by ALSA (are drivers missing?)"
-        )
-
-    def get_sound_card(self):
-        """
-        Get the sound card for gestalt reporting.
-        """
-        return self.sound_card
+    def _get_playback_pcm(self):
+        if self._playback_pcm is None:
+            try:
+                self._playback_pcm = alsaaudio.PCM(device=self.playback_device)
+            except Exception as e:
+                logging.error(f"Failed to open ALSA device: {e}")
+        return self._playback_pcm
 
     def _play(self, filename):
         try:
@@ -124,7 +91,8 @@ class SoundAlsa(Sound):  # pragma: no cover
             logging.error(f"{filename}: {err}")
         finally:
             self.currently_playing = False
-            device.close()
+            if 'device' in locals() and device:
+                device.close()
 
     def _play_wav_file(self, device, filename):
         with wave.open(filename, "rb") as f:

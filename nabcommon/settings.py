@@ -8,8 +8,16 @@ def configure(appname):
     if not settings.configured:
         from django.apps.config import AppConfig  # noqa
 
+        installed_apps = ["nabcommon"]
+        if appname != "nabcommon":
+            installed_apps.append(appname)
+        
+        # weather needs clock for bedtime/wakeup times
+        if appname == "nabweatherd":
+            installed_apps.append("nabclockd")
+
         conf = {
-            "INSTALLED_APPS": [appname],
+            "INSTALLED_APPS": installed_apps,
             "USE_TZ": True,
             "DATABASES": {
                 "default": {
@@ -19,6 +27,7 @@ def configure(appname):
                     "PASSWORD": "",
                     "HOST": "",
                     "PORT": "",
+                    "CONN_MAX_AGE": 60,
                 }
             },
         }
