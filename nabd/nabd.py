@@ -1220,6 +1220,9 @@ class Nabd:
         self.nabio.bind_ears_event(self.loop, self.ears_callback)
         self.nabio.bind_rfid_event(self.loop, self.rfid_callback)
         idle_task = self.loop.create_task(self.idle_worker_loop())
+        if self.nabio.has_sound_input():
+            self.loop.create_task(self._init_asr_nlu())
+
         if os.environ.get("LISTEN_PID", None) == str(os.getpid()):
             server_task = self.loop.create_task(
                 asyncio.start_server(

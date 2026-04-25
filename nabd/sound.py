@@ -29,6 +29,7 @@ class Sound(object, metaclass=abc.ABCMeta):
             preloaded_list = [f for f in results if f is not None]
 
         await self.start_playing_list_preloaded(preloaded_list, event)
+        await self.wait_until_done(event)
 
     async def start_playing(self, audio_resource):
         preloaded = await self.preload(audio_resource)
