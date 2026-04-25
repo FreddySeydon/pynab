@@ -1072,7 +1072,6 @@ class Nabd:
         assert self.asr is not None
         assert self.nlu is not None
         await self.nabio.end_acquisition()
-        await self.transition_to(State.IDLE)
         now = time.time()
         decoded_str = await self.asr.get_decoded_string(True)
         # ASR model needs to be improved, log outcome.
@@ -1081,6 +1080,7 @@ class Nabd:
         logging.debug(f"NLU response: {str(response)}")
         if self.nabio.rfid is not None:
             self.nabio.rfid.enable_polling()
+        await self.transition_to(State.IDLE)
         if response is None:
             # Did not understand
             await self.nabio.asr_failed()

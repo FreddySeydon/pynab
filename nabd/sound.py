@@ -26,6 +26,7 @@ class Sound(object, metaclass=abc.ABCMeta):
             # Preload in parallel
             tasks = [self.preload(filename) for filename in filenames]
             results = await asyncio.gather(*tasks)
+            # Filter out None results
             preloaded_list = [f for f in results if f is not None]
 
         await self.stop_playing()
@@ -38,7 +39,9 @@ class Sound(object, metaclass=abc.ABCMeta):
     async def start_playing(self, audio_resource):
         preloaded = await self.preload(audio_resource)
         if preloaded is not None:
+            await self.stop_playing()
             await self.start_playing_preloaded(preloaded)
+            await self.wait_until_done()
 
     @abc.abstractmethod
     async def start_playing_preloaded(self, filename):
