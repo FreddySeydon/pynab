@@ -37,7 +37,7 @@ class NabClockd(nabservice.NabService):
             self.config = await models.Config.load_async()
             self.loop_cv.notify()
 
-    def synchronized_since_boot(self):
+    async def synchronized_since_boot(self):
         """
         Determine whether the clock was synchronized since boot using uptime
         and /run/systemd/timesync/synchronized
@@ -50,14 +50,21 @@ class NabClockd(nabservice.NabService):
         first_run = False
         if self.__boot_date is None:
             first_run = True
-            self.__boot_date = subprocess.run(
-                ["uptime", "-s"], stdout=subprocess.PIPE
-            ).stdout
-        synchronized_date = subprocess.run(
-            ["stat", "-c", "%y", "/run/systemd/timesync/synchronized"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-        ).stdout
+            proc = await asyncio.create_subprocess_exec(
+                "uptime", "-s", stdout=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            self.__boot_date = stdout
+        proc = await asyncio.create_subprocess_exec(
+            "stat",
+            "-c",
+            "%y",
+            "/run/systemd/timesync/synchronized",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await proc.communicate()
+        synchronized_date = stdout
         if synchronized_date > self.__boot_date:
             self.__synchronized_since_boot = True
             if not first_run:
@@ -82,9 +89,9 @@ class NabClockd(nabservice.NabService):
         self.writer.write(packet.encode("utf8"))
         await self.writer.drain()
 
-    def clock_response(self, now: datetime.datetime) -> List[str]:
+    async def clock_response(self, now: datetime.datetime) -> List[str]:
         response = []
-        if self.synchronized_since_boot():
+        if await self.synchronized_since_boot():
             should_sleep = None
             if self.config.settings_per_day:
                 # Until 3am, we keep the same day name
@@ -171,7 +178,7 @@ class NabClockd(nabservice.NabService):
                             else:
                                 self.last_chime = None
                             self.current_tz = current_tz
-                        response = self.clock_response(now)
+                        response = await self.clock_response(now)
                         for r in response:
                             if r == "clear_override":
                                 self.config.sleep_wakeup_override = None

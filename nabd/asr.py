@@ -55,8 +55,10 @@ class ASR:
 
     async def get_decoded_string(self, sync):
         if sync:
-            future = self.executor.submit(lambda: self._get_decoded_string())
-            return future.result()
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                self.executor, self._get_decoded_string
+            )
         else:
             # not sure we could do that
             str, likelihood = self.decoder.get_decoded_string()

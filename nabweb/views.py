@@ -67,16 +67,13 @@ class BaseView(View, metaclass=abc.ABCMeta):
             ):
                 return {"status": "ok", "result": packet}
 
-    def get_locales(self):
+    def get_context(self):
         config = Config.load()
-        return [
-            (to_locale(lang), name, to_locale(lang) == config.locale)
+        user_locale = config.locale
+        locales = [
+            (to_locale(lang), name, to_locale(lang) == user_locale)
             for (lang, name) in settings.LANGUAGES
         ]
-
-    def get_context(self):
-        user_locale = Config.load().locale
-        locales = self.get_locales()
         return {"current_locale": user_locale, "locales": locales}
 
     def get(self, request, *args, **kwargs):
@@ -357,6 +354,11 @@ class NabWebSytemInfoView(BaseView):
         return "nabweb/system-info/index.html"
 
     def get_os_info(self):
+        cache_key = "os/info"
+        info = cache.get(cache_key)
+        if info is not None:
+            return info
+
         version = "(Unknown)"
         if os.path.isdir("/boot/dietpi"):
             variant = "DietPi"
@@ -395,7 +397,7 @@ class NabWebSytemInfoView(BaseView):
             ssh_state = os.popen("systemctl is-active ssh").read().rstrip()
         if ssh_state == "active" and os.path.isfile("/run/sshwarn"):
             ssh_state = "sshwarn"
-        return {
+        info = {
             "variant": variant,
             "version": version,
             "hostname": hostname,
@@ -404,6 +406,8 @@ class NabWebSytemInfoView(BaseView):
             "uptime": uptime,
             "ssh": ssh_state,
         }
+        cache.set(cache_key, info, 60)  # Cache for 1 minute
+        return info
 
     def get_pi_info(self):
         model = hardware.device_model()
@@ -490,7 +494,7 @@ class GitInfo:
         return root_dir
 
     @staticmethod
-    def get_repository_info(repository, cached=False, force=False):
+    def get_repository_info(repository, cached=False, force=False, fetch=False):
         relpath = GitInfo.REPOSITORIES[repository]
         cache_key = f"git/info/{repository}"
         if not force:
@@ -499,7 +503,7 @@ class GitInfo:
                 return info
         if cached:
             return None
-        info = GitInfo.do_get_repository_info(repository, relpath)
+        info = GitInfo.do_get_repository_info(repository, relpath, fetch)
         timeout = 600
         if info["status"] == "ok":
             timeout = 86400
@@ -507,7 +511,7 @@ class GitInfo:
         return info
 
     @staticmethod
-    def do_get_repository_info(repository, relpath):
+    def do_get_repository_info(repository, relpath, fetch=False):
         root_dir = GitInfo.get_root_dir()
         if root_dir is None:
             return {
@@ -571,10 +575,13 @@ class GitInfo:
             .strip()
             != ""
         )
+        fetch_cmd = ""
+        if fetch:
+            fetch_cmd = f"sudo -u \\#{repo_owner} git -C {repo_dir} fetch -t -f >/dev/null && "
+
         commits_count = (
             os.popen(
-                f"sudo -u \\#{repo_owner} "
-                f"git -C {repo_dir} fetch -t -f >/dev/null && "
+                f"{fetch_cmd}"
                 f"git -C {repo_dir} rev-list --count HEAD..{upstream_branch}"
             )
             .read()
@@ -661,7 +668,7 @@ class NabWebUpgradeRepositoryInfoView(View):
 class NabWebUpgradeCheckNowView(View):
     def post(self, request, *args, **kwargs):
         for repository in GitInfo.REPOSITORIES.keys():
-            GitInfo.get_repository_info(repository, force=True)
+            GitInfo.get_repository_info(repository, force=True, fetch=True)
         return JsonResponse({"status": "ok"})
 
 

@@ -45,8 +45,10 @@ class NLU:
         Interpret string from asr.
         Return None if interpretation failed.
         """
-        future = self.executor.submit(lambda s=string: self._interpret(s))
-        return future.result()
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self.executor, self._interpret, string
+        )
 
     def _interpret(self, string):
         try:

@@ -670,19 +670,23 @@ class Nabd:
         self, packet: AnyPacket, writer: asyncio.StreamWriter
     ):
         """Process a gestalt packet"""
-        proc = subprocess.Popen(
-            ["ps", "-o", "etimes", "-p", str(os.getpid()), "--no-headers"],
-            stdout=subprocess.PIPE,
+        proc = await asyncio.create_subprocess_exec(
+            "ps",
+            "-o",
+            "etimes",
+            "-p",
+            str(os.getpid()),
+            "--no-headers",
+            stdout=asyncio.subprocess.PIPE,
         )
-        proc.wait()
+        stdout, _ = await proc.communicate()
         response: ResponseGestaltPacketProto = {
             "state": self.state.value,
             "connections": len(self.service_writers),
             "hardware": await self.nabio.gestalt(),
         }
-        if proc.stdout:
-            results = proc.stdout.readlines()
-            uptime = int(results[0].strip())
+        if stdout:
+            uptime = int(stdout.decode().strip())
             response["uptime"] = uptime
         self.write_response_packet(packet, response, writer)
 
@@ -1103,7 +1107,8 @@ class Nabd:
     async def _do_system_command(self, sytemCommandStr):
         logging.info(f"Initiating system command: {sytemCommandStr}")
         if not _PYTEST:
-            os.system(sytemCommandStr)
+            proc = await asyncio.create_subprocess_shell(sytemCommandStr)
+            await proc.wait()
 
     def ears_callback(self, ear):
         if self.interactive_service_writer:
