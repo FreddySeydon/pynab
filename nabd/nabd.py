@@ -129,10 +129,6 @@ class Nabd:
         self.nlu: Optional[NLU] = None
         self._asr_locale: Optional[str] = None
         self._nlu_locale: Optional[str] = None
-        if self.nabio.has_sound_input():
-            self.loop.create_task(self._init_asr_nlu())
-        else:
-            Nabd.leds_boot(self.nabio, 4)
 
     async def _init_asr_nlu(self):
         from . import i18n
