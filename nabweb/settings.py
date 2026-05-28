@@ -27,6 +27,11 @@ SECRET_KEY = "+m)qk@&t%tlqj@o$jo$&egt34r7yu0fq4v!0o82&b9+b51ppyy"
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
+# Bypass loading heavy local ASR (Kaldi) and NLU (Snips) models
+DISABLE_LOCAL_ASR = True
+
+ALLOWED_HOSTS = ["*"]
+
 ALLOWED_HOSTS = ["*"]
 
 # https://code.djangoproject.com/ticket/30250

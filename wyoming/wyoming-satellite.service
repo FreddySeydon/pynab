@@ -1,0 +1,25 @@
+[Unit]
+Description=Home Assistant Wyoming Satellite
+After=network.target nabd.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/pynab
+ExecStart=/opt/pynab/venv/bin/python3 -m wyoming_satellite \
+    --name "Nabaztag" \
+    --uri "tcp://0.0.0.0:10500" \
+    --mic-device "default" \
+    --snd-device "default" \
+    --detect-command "/opt/pynab/venv/bin/python3 /opt/pynab/wyoming/wyoming_event_handler.py detect" \
+    --detection-command "/opt/pynab/venv/bin/python3 /opt/pynab/wyoming/wyoming_event_handler.py detection" \
+    --stt-start-command "/opt/pynab/venv/bin/python3 /opt/pynab/wyoming/wyoming_event_handler.py stt-start" \
+    --stt-stop-command "/opt/pynab/venv/bin/python3 /opt/pynab/wyoming/wyoming_event_handler.py stt-stop" \
+    --tts-start-command "/opt/pynab/venv/bin/python3 /opt/pynab/wyoming/wyoming_event_handler.py tts-start" \
+    --tts-stop-command "/opt/pynab/venv/bin/python3 /opt/pynab/wyoming/wyoming_event_handler.py tts-stop" \
+    --error-command "/opt/pynab/venv/bin/python3 /opt/pynab/wyoming/wyoming_event_handler.py error"
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -27,7 +27,6 @@ def configure(appname):
                     "PASSWORD": "",
                     "HOST": "",
                     "PORT": "",
-                    "CONN_MAX_AGE": 60,
                 }
             },
         }
