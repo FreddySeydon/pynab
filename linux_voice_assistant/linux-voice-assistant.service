@@ -1,0 +1,19 @@
+[Unit]
+Description=Home Assistant Linux Voice Assistant
+Documentation=https://github.com/OHF-Voice/linux-voice-assistant
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/linux-voice-assistant/docker-entrypoint.sh
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/linux-voice-assistant
+EnvironmentFile=-/opt/pynab/linux_voice_assistant/linux_voice_assistant.conf
+Environment=PATH=/opt/linux-voice-assistant/.venv/bin:/usr/bin:/bin
+ExecStart=/opt/linux-voice-assistant/docker-entrypoint.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
