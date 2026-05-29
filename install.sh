@@ -390,12 +390,6 @@ echo "Installing service files"
 if [ $upgrade -eq 1 ]; then
   echo "Installing service files - 12/14" > /tmp/pynab.upgrade
 fi
-for legacy_service in wyoming-satellite.service wyoming-bridge.service ; do
-  if [ -f "/lib/systemd/system/${legacy_service}" ]; then
-    sudo systemctl disable --now ${legacy_service} || true
-    sudo rm -f "/lib/systemd/system/${legacy_service}"
-  fi
-done
 for service_file in nabd/nabd.socket */*.service ; do
   name=`basename ${service_file}`
   sudo sed -e "s|/opt/pynab|${root_dir}|g" -e "s|/home/pi/pynab|${root_dir}|g" < ${service_file} > /tmp/${name}

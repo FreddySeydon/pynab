@@ -45,20 +45,20 @@ def handle_packet(packet):
     event_type = packet.get("event")
     logging.info("Detected button event: %s", event_type)
 
-    if event_type == "single":
+    if event_type == "click":
         trigger_home_assistant_webhook("single_click")
-    elif event_type == "double":
+    elif event_type == "double_click":
         trigger_home_assistant_webhook("double_click")
-    elif event_type == "long":
+    elif event_type in ("hold", "click_and_hold"):
         trigger_home_assistant_webhook("long_press")
 
 
 def main():
     if HA_WEBHOOK_URL:
-        logging.info("Starting Nabaztag button bridge")
+        logging.info("Starting Wyoming button bridge")
     else:
         logging.info(
-            "Starting Nabaztag button bridge without HA_WEBHOOK_URL; "
+            "Starting Wyoming button bridge without HA_WEBHOOK_URL; "
             "events will only be logged."
         )
 
