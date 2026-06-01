@@ -9,8 +9,8 @@ WorkingDirectory=/opt/pynab
 ExecStart=/opt/pynab/venv/bin/python3 -m wyoming_satellite \
     --name "Nabaztag" \
     --uri "tcp://0.0.0.0:10500" \
-    --mic-command "arecord -r 16000 -c 1 -f S16_LE -t raw" \
-    --snd-command "aplay -r 22050 -c 1 -f S16_LE -t raw" \
+    --mic-command "arecord -D plughw:CARD=tagtagtagsound -r 16000 -c 1 -f S16_LE -t raw" \
+    --snd-command "aplay -D plughw:CARD=tagtagtagsound -r 22050 -c 1 -f S16_LE -t raw" \
     --detect-command "/opt/pynab/venv/bin/python3 /opt/pynab/wyoming/wyoming_event_handler.py detect" \
     --detection-command "/opt/pynab/venv/bin/python3 /opt/pynab/wyoming/wyoming_event_handler.py detection" \
     --stt-start-command "/opt/pynab/venv/bin/python3 /opt/pynab/wyoming/wyoming_event_handler.py stt-start" \
