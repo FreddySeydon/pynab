@@ -3,6 +3,7 @@ import logging
 import os
 import socket
 import uuid
+from base64 import b64encode
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional, Tuple
@@ -112,6 +113,15 @@ def build_audio_packet(audio_url: str, cancelable: bool = False) -> Dict[str, An
     }
 
 
+def build_audio_choreography_packet(
+    audio_url: str, active_choreography: str, end_choreography: str
+) -> Dict[str, Any]:
+    audio_packet = build_audio_packet(audio_url)
+    audio_packet["sequence"][0]["choreography"] = active_choreography
+    audio_packet["sequence"].append({"choreography": end_choreography})
+    return audio_packet
+
+
 def get_ha_tts_url(body: Dict[str, Any]) -> str:
     if not HA_URL or not HA_TOKEN:
         raise BridgeError(
@@ -193,6 +203,88 @@ def build_weather_message(body: Dict[str, Any]) -> str:
         return f"Das Wetter ist {condition_text}, bei {temperature} {spoken_unit}."
 
     return f"The weather is {condition_text}, {temperature} {unit}."
+
+
+def color_for_condition(condition: str) -> List[Tuple[int, int, int]]:
+    if condition in ("rainy", "pouring", "lightning-rainy"):
+        return [(0, 48, 255), (0, 0, 64), (0, 48, 255)]
+    if condition in ("snowy", "snowy-rainy"):
+        return [(160, 220, 255), (40, 80, 255), (160, 220, 255)]
+    if condition in ("sunny", "clear-night"):
+        return [(255, 210, 0), (255, 160, 0), (255, 210, 0)]
+    if condition in ("cloudy", "partlycloudy", "fog"):
+        return [(120, 150, 180), (50, 80, 130), (120, 150, 180)]
+    if condition in ("lightning", "hail"):
+        return [(80, 0, 180), (255, 255, 120), (80, 0, 180)]
+    if condition in ("windy", "windy-variant"):
+        return [(0, 180, 160), (0, 80, 120), (0, 180, 160)]
+    return [(0, 180, 80), (0, 80, 40), (0, 180, 80)]
+
+
+def interpolate_color(
+    start: Tuple[int, int, int], end: Tuple[int, int, int], step: int, steps: int
+) -> Tuple[int, int, int]:
+    if steps <= 0:
+        return end
+    return tuple(
+        int(start[i] + ((end[i] - start[i]) * step / steps)) for i in range(3)
+    )
+
+
+def choreography_data_uri(
+    frames: List[List[Tuple[int, int, int]]],
+    start_ears: Optional[Tuple[int, int]] = None,
+    end_ears: Optional[Tuple[int, int]] = None,
+) -> str:
+    # MTL choreography bytes: wait, opcode, args. Opcode 1 sets frame duration;
+    # opcode 7 sets a single LED. Opcode 8 moves an ear. Front LEDs are
+    # right=1, center=2, left=3. Ears are left=0, right=1.
+    data = bytearray([0, 1, 5])  # one wait unit is 50ms
+    if start_ears is not None:
+        data.extend([0, 8, 0, start_ears[0], 0])
+        data.extend([0, 8, 1, start_ears[1], 0])
+
+    led_indexes = (3, 2, 1)
+    for frame in frames:
+        first_led = True
+        for led_index, color in zip(led_indexes, frame):
+            wait = 1 if first_led else 0
+            data.extend([wait, 7, led_index, color[0], color[1], color[2], 0, 0])
+            first_led = False
+
+    if end_ears is not None:
+        data.extend([1, 8, 0, end_ears[0], 0])
+        data.extend([0, 8, 1, end_ears[1], 0])
+
+    return (
+        "data:application/x-nabaztag-mtl-choreography;base64,"
+        + b64encode(bytes(data)).decode("ascii")
+    )
+
+
+def build_weather_choreographies(condition: str) -> Tuple[str, str]:
+    colors = color_for_condition(condition)
+    off = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
+
+    active_frames: List[List[Tuple[int, int, int]]] = []
+    for _ in range(8):
+        for step in range(1, 21):
+            active_frames.append(
+                [interpolate_color(off[ix], colors[ix], step, 20) for ix in range(3)]
+            )
+        for step in range(1, 21):
+            active_frames.append(
+                [interpolate_color(colors[ix], off[ix], step, 20) for ix in range(3)]
+            )
+
+    end_frames = [
+        [interpolate_color(colors[ix], off[ix], step, 12) for ix in range(3)]
+        for step in range(1, 13)
+    ]
+    return (
+        choreography_data_uri(active_frames, start_ears=(10, 10)),
+        choreography_data_uri(end_frames, end_ears=(0, 0)),
+    )
 
 
 def play_ha_tts(body: Dict[str, Any]) -> Dict[str, Any]:
@@ -329,12 +421,19 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if path == "/weather/say":
             tts_body = dict(body)
             tts_body["message"] = build_weather_message(body)
+            condition = body.get("condition", "unknown")
+            if not isinstance(condition, str):
+                condition = "unknown"
             if "tts_language" in tts_body:
                 tts_body["language"] = tts_body.pop("tts_language")
             else:
                 tts_body.pop("language", None)
             tts_body.pop("message_language", None)
-            result = play_ha_tts(tts_body)
+            audio_url = get_ha_tts_url(tts_body)
+            active_chor, end_chor = build_weather_choreographies(condition)
+            packet = build_audio_choreography_packet(audio_url, active_chor, end_chor)
+            result = send_to_nabd(packet)
+            result["audio_url"] = audio_url
             result["message"] = tts_body["message"]
             return result
 

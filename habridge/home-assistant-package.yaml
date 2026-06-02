@@ -174,42 +174,9 @@ script:
           condition: "{{ states(weather_entity | default('weather.home')) }}"
           temperature: "{{ state_attr(weather_entity | default('weather.home'), 'temperature') }}"
           unit: "{{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'Grad' }}"
-          weather_colors: >-
-            {% set condition = states(weather_entity | default('weather.home')) %}
-            {% if condition in ['rainy', 'pouring', 'lightning-rainy'] %}
-            [{"left":"0000ff","center":"000000","right":"0000ff"},{"left":"000000","center":"0000ff","right":"000000"},{"left":"000000","center":"000000","right":"000000"}]
-            {% elif condition in ['snowy', 'snowy-rainy'] %}
-            [{"left":"ffffff","center":"0000ff","right":"ffffff"},{"left":"000000","center":"000000","right":"000000"}]
-            {% elif condition in ['sunny', 'clear-night'] %}
-            [{"left":"ffff00","center":"ffff00","right":"ffff00"},{"left":"000000","center":"000000","right":"000000"}]
-            {% elif condition in ['cloudy', 'partlycloudy'] %}
-            [{"left":"ffffff","center":"000000","right":"ffffff"},{"left":"000000","center":"0000ff","right":"000000"}]
-            {% elif condition in ['fog'] %}
-            [{"left":"0000ff","center":"0000ff","right":"0000ff"},{"left":"000000","center":"000000","right":"000000"}]
-            {% else %}
-            [{"left":"00ff00","center":"000000","right":"00ff00"},{"left":"000000","center":"000000","right":"000000"}]
-            {% endif %}
-      - action: rest_command.nabaztag_leds
-        data:
-          info_id: ha_weather
-          tempo: 40
-          colors: "{{ weather_colors }}"
-      - action: rest_command.nabaztag_ears
-        data:
-          left: 10
-          right: 10
       - action: rest_command.nabaztag_say_weather
         data:
           engine_id: "{{ tts_entity }}"
           condition: "{{ condition }}"
           temperature: "{{ temperature }}"
           unit: "{{ unit }}"
-      - delay:
-          seconds: 12
-      - action: rest_command.nabaztag_clear_leds
-        data:
-          info_id: ha_weather
-      - action: rest_command.nabaztag_ears
-        data:
-          left: 0
-          right: 0

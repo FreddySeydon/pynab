@@ -347,7 +347,10 @@ bridge. Its speech step uses the bridge `/tts/ha` endpoint, so the Nabaztag
 does not need to appear as a Home Assistant media player. Pass `tts_entity`
 for speech. The package sends raw weather values to `/weather/say`, and the
 bridge prepares a German weather sentence before asking Home Assistant TTS for
-an MP3.
+an MP3. `/weather/say` attaches a generated smooth LED choreography to the
+audio command and moves the ears inside the same choreography, so active
+weather LEDs keep running while the rabbit speaks and the Home Assistant script
+only needs one bridge call.
 
 To enable bridge speech, create a long-lived access token in Home Assistant and
 set these values in `/opt/pynab/habridge/habridge.conf`:
