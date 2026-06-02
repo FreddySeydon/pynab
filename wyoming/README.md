@@ -34,7 +34,7 @@ sudo apt-get install -y \
   git gcc make raspberrypi-kernel-headers \
   python3 python3-venv python3-dev \
   postgresql postgresql-contrib libpq-dev \
-  nginx gettext alsa-utils libasound2-dev \
+  nginx gettext alsa-utils libasound2-dev libmpg123-0 mpg123 \
   libatlas-base-dev libopenblas-dev libblas3 liblapack3
 ```
 
@@ -368,4 +368,23 @@ Test bridge speech from the Nabaztag:
 curl -X POST http://127.0.0.1:10544/tts/ha \
   -H 'Content-Type: application/json' \
   -d '{"engine_id":"tts.your_tts_entity","message":"The weather bridge is working."}'
+```
+
+If `/tts/ha` returns `status: ok` but the speaker only crackles or stays silent,
+install the native MP3 decoder used by Pynab:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y libmpg123-0 mpg123
+```
+
+Verify the decoder from the Pynab virtual environment:
+
+```sh
+/opt/pynab/venv/bin/python - <<'PY'
+from mpg123 import Mpg123
+mp3 = Mpg123("/tmp/ha_tts_test.mp3")
+print(mp3.get_format())
+print("frames ok")
+PY
 ```
