@@ -165,14 +165,6 @@ script:
         required: false
         selector:
           text: {}
-      message_language:
-        required: false
-        default: de
-        selector:
-          select:
-            options:
-              - de
-              - en
     sequence:
       - variables:
           weather_target: "{{ weather_entity | default('weather.home') }}"
@@ -180,31 +172,24 @@ script:
           temperature: "{{ state_attr(weather_entity | default('weather.home'), 'temperature') }}"
           unit: "{{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'degrees' }}"
           message: >-
-            {% set lang = message_language | default('de') %}
             {% set condition = states(weather_entity | default('weather.home')) %}
-            {% set condition_de = {
-              'clear-night': 'klar',
-              'cloudy': 'bewölkt',
-              'fog': 'neblig',
-              'hail': 'hagelig',
-              'lightning': 'gewittrig',
-              'lightning-rainy': 'gewittrig und regnerisch',
-              'partlycloudy': 'teilweise bewölkt',
-              'pouring': 'stark regnerisch',
-              'rainy': 'regnerisch',
-              'snowy': 'verschneit',
-              'snowy-rainy': 'Schneeregen',
-              'sunny': 'sonnig',
-              'windy': 'windig',
-              'windy-variant': 'windig und bewölkt'
-            } %}
-            {% if lang == 'de' %}
-            Das Wetter ist {{ condition_de.get(condition, condition) }}{% if state_attr(weather_entity | default('weather.home'), 'temperature') is not none %},
-            bei {{ state_attr(weather_entity | default('weather.home'), 'temperature') }} {{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'Grad' }}{% endif %}.
-            {% else %}
-            The weather is {{ condition }}{% if state_attr(weather_entity | default('weather.home'), 'temperature') is not none %},
-            {{ state_attr(weather_entity | default('weather.home'), 'temperature') }} {{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'degrees' }}{% endif %}.
+            {% if condition == 'clear-night' %}{% set condition_text = 'klar' %}
+            {% elif condition == 'cloudy' %}{% set condition_text = 'bewölkt' %}
+            {% elif condition == 'fog' %}{% set condition_text = 'neblig' %}
+            {% elif condition == 'lightning' %}{% set condition_text = 'gewittrig' %}
+            {% elif condition == 'lightning-rainy' %}{% set condition_text = 'gewittrig und regnerisch' %}
+            {% elif condition == 'partlycloudy' %}{% set condition_text = 'teilweise bewölkt' %}
+            {% elif condition == 'pouring' %}{% set condition_text = 'stark regnerisch' %}
+            {% elif condition == 'rainy' %}{% set condition_text = 'regnerisch' %}
+            {% elif condition == 'snowy' %}{% set condition_text = 'verschneit' %}
+            {% elif condition == 'snowy-rainy' %}{% set condition_text = 'Schneeregen' %}
+            {% elif condition == 'sunny' %}{% set condition_text = 'sonnig' %}
+            {% elif condition == 'windy' %}{% set condition_text = 'windig' %}
+            {% elif condition == 'windy-variant' %}{% set condition_text = 'windig und bewölkt' %}
+            {% else %}{% set condition_text = condition %}
             {% endif %}
+            Das Wetter ist {{ condition_text }}{% if state_attr(weather_entity | default('weather.home'), 'temperature') is not none %},
+            bei {{ state_attr(weather_entity | default('weather.home'), 'temperature') }} {{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'Grad' }}{% endif %}.
           weather_colors: >-
             {% set condition = states(weather_entity | default('weather.home')) %}
             {% if condition in ['rainy', 'pouring', 'lightning-rainy'] %}
