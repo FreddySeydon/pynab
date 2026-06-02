@@ -129,6 +129,29 @@ Assistant server, typically with openWakeWord.
 `/opt/pynab/wyoming/wyoming.conf` if you want button events to trigger Home
 Assistant automations.
 
+## RFID webhooks
+
+`nabwebhook.service` is useful for RFID-triggered Home Assistant automations.
+When an RFID tag is configured for the webhook app, `nabwebhook` reads the URL
+stored for that tag and calls it with HTTP GET.
+
+Enable it with:
+
+```sh
+sudo systemctl enable --now nabwebhook.service
+systemctl status nabwebhook.service --no-pager
+```
+
+Use the Pynab web RFID page to assign a Home Assistant webhook URL to a tag,
+for example:
+
+```text
+http://homeassistant.local:8123/api/webhook/<webhook-id>
+```
+
+If a Home Assistant automation needs POST instead of GET, change
+`nabwebhook/nabwebhook.py` to use `requests.post(...)`.
+
 ## Voice-focused service profile
 
 The original Pi Zero has little CPU headroom. For a voice-focused setup, keep
@@ -139,6 +162,8 @@ nabd.service
 nabweb.service
 nabweb-boot.service
 nabboot.service
+nabsurprised.service
+nabwebhook.service
 wyoming-satellite.service
 ```
 
@@ -146,7 +171,9 @@ Keep `nabtaichid.service` and `nabclockd.service` only if their local sounds
 and animations are still wanted. Any local Pynab service that plays audio can
 compete with Wyoming for the sound card while Assist is listening or speaking.
 
-Disable unused/background services:
+Disable unused/background services. Home Assistant can replace most of these
+with lighter automations while the Nabaztag only handles speech, ears, LEDs,
+RFID, and audio playback:
 
 ```sh
 sudo systemctl disable --now \
@@ -156,9 +183,7 @@ sudo systemctl disable --now \
   nabiftttd.service \
   nabmastodond.service \
   nabradio.service \
-  nabsurprised.service \
   nabweatherd.service \
-  nabwebhook.service \
   wyoming-bridge.service
 ```
 
@@ -173,3 +198,24 @@ Re-enable a service later with:
 ```sh
 sudo systemctl enable --now <service-name>.service
 ```
+
+## Clearing stale LED animations
+
+`nabweatherd` can leave visible blue/rain-style info animations. If the service
+has since been disabled but the LEDs keep blinking, clear its info packets once:
+
+```sh
+python3 - <<'PY'
+import json
+import socket
+
+for info_id in ("nabweatherd", "nabweatherd_rain"):
+    with socket.create_connection(("127.0.0.1", 10543), timeout=5) as sock:
+        packet = {"type": "info", "info_id": info_id}
+        sock.sendall((json.dumps(packet) + "\r\n").encode("utf-8"))
+PY
+```
+
+For new weather behavior, prefer a Home Assistant automation that sends a short
+speech message and an explicit LED animation to the Nabaztag instead of running
+`nabweatherd` locally.
