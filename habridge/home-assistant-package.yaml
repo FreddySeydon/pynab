@@ -1,0 +1,206 @@
+# Example Home Assistant package for the Pynab HA bridge.
+#
+# Copy this file to Home Assistant, for example:
+# /config/packages/nabaztag.yaml
+#
+# Ensure packages are enabled in configuration.yaml:
+#
+# homeassistant:
+#   packages: !include_dir_named packages
+
+rest_command:
+  nabaztag_ears:
+    url: "http://nabaztag.local:10544/ears"
+    method: post
+    content_type: "application/json"
+    payload: >
+      {"left":{{ left | int }},"right":{{ right | int }}}
+
+  nabaztag_leds:
+    url: "http://nabaztag.local:10544/leds/info"
+    method: post
+    content_type: "application/json"
+    payload: >
+      {"info_id":"{{ info_id }}","tempo":{{ tempo | int }},"colors":{{ colors }}}
+
+  nabaztag_clear_leds:
+    url: "http://nabaztag.local:10544/leds/clear"
+    method: post
+    content_type: "application/json"
+    payload: >
+      {"info_id":"{{ info_id }}"}
+
+  nabaztag_sleep:
+    url: "http://nabaztag.local:10544/sleep"
+    method: post
+    content_type: "application/json"
+    payload: "{}"
+
+  nabaztag_wakeup:
+    url: "http://nabaztag.local:10544/wakeup"
+    method: post
+    content_type: "application/json"
+    payload: "{}"
+
+script:
+  nabaztag_move_ears:
+    alias: Nabaztag - Move ears
+    mode: queued
+    fields:
+      left:
+        required: true
+        selector:
+          number:
+            min: 0
+            max: 16
+            mode: slider
+      right:
+        required: true
+        selector:
+          number:
+            min: 0
+            max: 16
+            mode: slider
+    sequence:
+      - action: rest_command.nabaztag_ears
+        data:
+          left: "{{ left | int }}"
+          right: "{{ right | int }}"
+
+  nabaztag_led_effect:
+    alias: Nabaztag - LED effect
+    mode: queued
+    fields:
+      info_id:
+        required: false
+        default: ha_effect
+        selector:
+          text: {}
+      tempo:
+        required: false
+        default: 40
+        selector:
+          number:
+            min: 1
+            max: 300
+            mode: box
+      colors:
+        required: true
+        selector:
+          text:
+            multiline: true
+    sequence:
+      - action: rest_command.nabaztag_leds
+        data:
+          info_id: "{{ info_id | default('ha_effect') }}"
+          tempo: "{{ tempo | default(40) | int }}"
+          colors: "{{ colors }}"
+
+  nabaztag_clear_led_effect:
+    alias: Nabaztag - Clear LED effect
+    mode: queued
+    fields:
+      info_id:
+        required: false
+        default: ha_effect
+        selector:
+          text: {}
+    sequence:
+      - action: rest_command.nabaztag_clear_leds
+        data:
+          info_id: "{{ info_id | default('ha_effect') }}"
+
+  nabaztag_sleep:
+    alias: Nabaztag - Sleep
+    mode: single
+    sequence:
+      - action: rest_command.nabaztag_sleep
+
+  nabaztag_wakeup:
+    alias: Nabaztag - Wake up
+    mode: single
+    sequence:
+      - action: rest_command.nabaztag_wakeup
+      - action: rest_command.nabaztag_ears
+        data:
+          left: 0
+          right: 0
+      - action: rest_command.nabaztag_clear_leds
+        data:
+          info_id: ha_effect
+      - action: rest_command.nabaztag_clear_leds
+        data:
+          info_id: ha_weather
+
+  nabaztag_show_weather:
+    alias: Nabaztag - Show weather
+    mode: queued
+    fields:
+      weather_entity:
+        required: false
+        default: weather.home
+        selector:
+          entity:
+            domain: weather
+      tts_entity:
+        required: false
+        selector:
+          entity:
+            domain: tts
+      media_player_entity:
+        required: false
+        selector:
+          entity:
+            domain: media_player
+    sequence:
+      - variables:
+          weather_target: "{{ weather_entity | default('weather.home') }}"
+          weather_state: "{{ states(weather_entity | default('weather.home')) }}"
+          temperature: "{{ state_attr(weather_entity | default('weather.home'), 'temperature') }}"
+          unit: "{{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'degrees' }}"
+          message: >-
+            The weather is {{ states(weather_entity | default('weather.home')) }}{% if state_attr(weather_entity | default('weather.home'), 'temperature') is not none %},
+            {{ state_attr(weather_entity | default('weather.home'), 'temperature') }} {{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'degrees' }}{% endif %}.
+          weather_colors: >-
+            {% set condition = states(weather_entity | default('weather.home')) %}
+            {% if condition in ['rainy', 'pouring', 'lightning-rainy'] %}
+            [{"left":"0000ff","center":"000000","right":"0000ff"},{"left":"000000","center":"0000ff","right":"000000"},{"left":"000000","center":"000000","right":"000000"}]
+            {% elif condition in ['snowy', 'snowy-rainy'] %}
+            [{"left":"ffffff","center":"0000ff","right":"ffffff"},{"left":"000000","center":"000000","right":"000000"}]
+            {% elif condition in ['sunny', 'clear-night'] %}
+            [{"left":"ffff00","center":"ffff00","right":"ffff00"},{"left":"000000","center":"000000","right":"000000"}]
+            {% elif condition in ['cloudy', 'partlycloudy'] %}
+            [{"left":"ffffff","center":"000000","right":"ffffff"},{"left":"000000","center":"0000ff","right":"000000"}]
+            {% elif condition in ['fog'] %}
+            [{"left":"0000ff","center":"0000ff","right":"0000ff"},{"left":"000000","center":"000000","right":"000000"}]
+            {% else %}
+            [{"left":"00ff00","center":"000000","right":"00ff00"},{"left":"000000","center":"000000","right":"000000"}]
+            {% endif %}
+      - action: rest_command.nabaztag_leds
+        data:
+          info_id: ha_weather
+          tempo: 40
+          colors: "{{ weather_colors }}"
+      - action: rest_command.nabaztag_ears
+        data:
+          left: 10
+          right: 10
+      - if:
+          - condition: template
+            value_template: "{{ tts_entity is defined and tts_entity and media_player_entity is defined and media_player_entity }}"
+        then:
+          - action: tts.speak
+            target:
+              entity_id: "{{ tts_entity }}"
+            data:
+              media_player_entity_id: "{{ media_player_entity }}"
+              message: "{{ message }}"
+      - delay:
+          seconds: 12
+      - action: rest_command.nabaztag_clear_leds
+        data:
+          info_id: ha_weather
+      - action: rest_command.nabaztag_ears
+        data:
+          left: 0
+          right: 0

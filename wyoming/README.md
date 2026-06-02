@@ -303,3 +303,43 @@ rest_command:
     content_type: "application/json"
     payload: >
       {"info_id":"{{ info_id }}"}
+```
+
+A fuller Home Assistant package is available in:
+
+```text
+habridge/home-assistant-package.yaml
+```
+
+Copy it into Home Assistant, for example:
+
+```text
+/config/packages/nabaztag.yaml
+```
+
+If packages are not enabled yet, add this to Home Assistant
+`configuration.yaml`:
+
+```yaml
+homeassistant:
+  packages: !include_dir_named packages
+```
+
+Then check the Home Assistant configuration and restart Home Assistant.
+
+The package adds scripts for:
+
+```text
+script.nabaztag_move_ears
+script.nabaztag_led_effect
+script.nabaztag_clear_led_effect
+script.nabaztag_sleep
+script.nabaztag_wakeup
+script.nabaztag_show_weather
+```
+
+`script.nabaztag_show_weather` always drives ears and weather LEDs through the
+bridge. Its speech step is optional and only runs if you pass both a valid
+Home Assistant TTS entity and a media player entity. If the Wyoming satellite
+does not appear as a media player target, keep this script LED-only for now and
+add speech as a separate bridge feature later.
