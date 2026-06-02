@@ -167,6 +167,9 @@ nabwebhook.service
 wyoming-satellite.service
 ```
 
+After installing the Home Assistant bridge, also keep `habridge.service`
+enabled.
+
 Keep `nabtaichid.service` and `nabclockd.service` only if their local sounds
 and animations are still wanted. Any local Pynab service that plays audio can
 compete with Wyoming for the sound card while Assist is listening or speaking.
@@ -219,3 +222,84 @@ PY
 For new weather behavior, prefer a Home Assistant automation that sends a short
 speech message and an explicit LED animation to the Nabaztag instead of running
 `nabweatherd` locally.
+
+## Home Assistant bridge
+
+`habridge.service` exposes a small HTTP API on the Nabaztag that Home Assistant
+can call. The bridge translates HTTP JSON requests into local `nabd` packets on
+`127.0.0.1:10543`.
+
+Install it after pulling this branch on the Nabaztag:
+
+```sh
+cd /opt/pynab
+git fetch origin
+git pull --ff-only
+sudo cp habridge/habridge.service /lib/systemd/system/habridge.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now habridge.service
+```
+
+Check it locally:
+
+```sh
+curl http://127.0.0.1:10544/health
+```
+
+Useful test calls:
+
+```sh
+curl -X POST http://127.0.0.1:10544/ears \
+  -H 'Content-Type: application/json' \
+  -d '{"left":10,"right":10}'
+
+curl -X POST http://127.0.0.1:10544/leds/info \
+  -H 'Content-Type: application/json' \
+  -d '{"info_id":"ha_test","tempo":40,"colors":[{"left":"0000ff","center":"000000","right":"0000ff"},{"left":"000000","center":"000000","right":"000000"}]}'
+
+curl -X POST http://127.0.0.1:10544/leds/clear \
+  -H 'Content-Type: application/json' \
+  -d '{"info_id":"ha_test"}'
+```
+
+The bridge supports:
+
+```text
+GET  /health
+POST /leds/info
+POST /leds/clear
+POST /ears
+POST /sleep
+POST /wakeup
+POST /packet
+```
+
+`/packet` sends a raw `nabd` packet and is useful for experiments.
+
+Optional settings are in `/opt/pynab/habridge/habridge.conf`. Set
+`HABRIDGE_TOKEN` if the bridge should require a bearer token or `?token=...`.
+
+Example Home Assistant `rest_command` entries:
+
+```yaml
+rest_command:
+  nabaztag_ears:
+    url: "http://nabaztag.local:10544/ears"
+    method: post
+    content_type: "application/json"
+    payload: >
+      {"left":{{ left }},"right":{{ right }}}
+
+  nabaztag_leds:
+    url: "http://nabaztag.local:10544/leds/info"
+    method: post
+    content_type: "application/json"
+    payload: >
+      {"info_id":"{{ info_id }}","tempo":{{ tempo }},"colors":{{ colors }}}
+
+  nabaztag_clear_leds:
+    url: "http://nabaztag.local:10544/leds/clear"
+    method: post
+    content_type: "application/json"
+    payload: >
+      {"info_id":"{{ info_id }}"}
