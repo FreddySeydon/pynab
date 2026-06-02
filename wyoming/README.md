@@ -152,6 +152,40 @@ http://homeassistant.local:8123/api/webhook/<webhook-id>
 If a Home Assistant automation needs POST instead of GET, change
 `nabwebhook/nabwebhook.py` to use `requests.post(...)`.
 
+### RFID tag to Home Assistant automation
+
+Create the Home Assistant automation first:
+
+```text
+Settings -> Automations & scenes -> Create automation
+Create new automation -> Start with an empty automation
+Add trigger -> Other triggers -> Webhook
+```
+
+Use settings like:
+
+```text
+Webhook ID: nabaztag_test_tag
+Allowed methods: GET
+Local only: enabled
+```
+
+Then add any Home Assistant action, for example turning on a light.
+
+The webhook URL is:
+
+```text
+http://<home-assistant-ip>:8123/api/webhook/nabaztag_test_tag
+```
+
+In the Pynab web interface, open the RFID page, scan or select the tag, choose
+the webhook app, and store that Home Assistant webhook URL on the tag. When the
+Nabaztag scans the tag, `nabwebhook` calls the URL and Home Assistant runs the
+automation.
+
+`nabwebhook` currently performs HTTP GET, so the Home Assistant webhook trigger
+must allow GET.
+
 ## Voice-focused service profile
 
 The original Pi Zero has little CPU headroom. For a voice-focused setup, keep
