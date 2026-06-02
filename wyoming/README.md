@@ -273,6 +273,7 @@ POST /sleep
 POST /wakeup
 POST /audio/url
 POST /tts/ha
+POST /weather/say
 POST /packet
 ```
 
@@ -344,9 +345,9 @@ script.nabaztag_show_weather
 `script.nabaztag_show_weather` always drives ears and weather LEDs through the
 bridge. Its speech step uses the bridge `/tts/ha` endpoint, so the Nabaztag
 does not need to appear as a Home Assistant media player. Pass `tts_entity`
-for speech and optionally `tts_language` for the TTS engine language. The
-package uses a German weather sentence by default and only sends `tts_language`
-if you provide one.
+for speech. The package sends raw weather values to `/weather/say`, and the
+bridge prepares a German weather sentence before asking Home Assistant TTS for
+an MP3.
 
 To enable bridge speech, create a long-lived access token in Home Assistant and
 set these values in `/opt/pynab/habridge/habridge.conf`:
@@ -370,6 +371,14 @@ Test bridge speech from the Nabaztag:
 curl -X POST http://127.0.0.1:10544/tts/ha \
   -H 'Content-Type: application/json' \
   -d '{"engine_id":"tts.your_tts_entity","message":"The weather bridge is working."}'
+```
+
+Test bridge weather speech from the Nabaztag:
+
+```sh
+curl -X POST http://127.0.0.1:10544/weather/say \
+  -H 'Content-Type: application/json' \
+  -d '{"engine_id":"tts.your_tts_entity","condition":"rainy","temperature":"12","unit":"°C","language":"de"}'
 ```
 
 If `/tts/ha` returns `status: ok` but the speaker only crackles or stays silent,

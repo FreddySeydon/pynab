@@ -54,7 +54,14 @@ rest_command:
     method: post
     content_type: "application/json"
     payload: >
-      {"engine_id":"{{ engine_id }}","message":{{ message | to_json }},"cache":true{% if language is defined and language %},"language":"{{ language }}"{% endif %}}
+      {"engine_id":"{{ engine_id }}","message":{{ message | to_json }},"cache":true}
+
+  nabaztag_say_weather:
+    url: "http://nabaztag.local:10544/weather/say"
+    method: post
+    content_type: "application/json"
+    payload: >
+      {"engine_id":{{ engine_id | to_json }},"condition":{{ condition | to_json }},"temperature":{{ temperature | to_json }},"unit":{{ unit | to_json }},"message_language":"de","cache":true}
 
 script:
   nabaztag_move_ears:
@@ -161,35 +168,12 @@ script:
         selector:
           entity:
             domain: tts
-      tts_language:
-        required: false
-        selector:
-          text: {}
     sequence:
       - variables:
           weather_target: "{{ weather_entity | default('weather.home') }}"
-          weather_state: "{{ states(weather_entity | default('weather.home')) }}"
+          condition: "{{ states(weather_entity | default('weather.home')) }}"
           temperature: "{{ state_attr(weather_entity | default('weather.home'), 'temperature') }}"
-          unit: "{{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'degrees' }}"
-          message: >-
-            {% set condition = states(weather_entity | default('weather.home')) %}
-            {% if condition == 'clear-night' %}{% set condition_text = 'klar' %}
-            {% elif condition == 'cloudy' %}{% set condition_text = 'bewölkt' %}
-            {% elif condition == 'fog' %}{% set condition_text = 'neblig' %}
-            {% elif condition == 'lightning' %}{% set condition_text = 'gewittrig' %}
-            {% elif condition == 'lightning-rainy' %}{% set condition_text = 'gewittrig und regnerisch' %}
-            {% elif condition == 'partlycloudy' %}{% set condition_text = 'teilweise bewölkt' %}
-            {% elif condition == 'pouring' %}{% set condition_text = 'stark regnerisch' %}
-            {% elif condition == 'rainy' %}{% set condition_text = 'regnerisch' %}
-            {% elif condition == 'snowy' %}{% set condition_text = 'verschneit' %}
-            {% elif condition == 'snowy-rainy' %}{% set condition_text = 'Schneeregen' %}
-            {% elif condition == 'sunny' %}{% set condition_text = 'sonnig' %}
-            {% elif condition == 'windy' %}{% set condition_text = 'windig' %}
-            {% elif condition == 'windy-variant' %}{% set condition_text = 'windig und bewölkt' %}
-            {% else %}{% set condition_text = condition %}
-            {% endif %}
-            Das Wetter ist {{ condition_text }}{% if state_attr(weather_entity | default('weather.home'), 'temperature') is not none %},
-            bei {{ state_attr(weather_entity | default('weather.home'), 'temperature') }} {{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'Grad' }}{% endif %}.
+          unit: "{{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'Grad' }}"
           weather_colors: >-
             {% set condition = states(weather_entity | default('weather.home')) %}
             {% if condition in ['rainy', 'pouring', 'lightning-rainy'] %}
@@ -214,11 +198,12 @@ script:
         data:
           left: 10
           right: 10
-      - action: rest_command.nabaztag_say
+      - action: rest_command.nabaztag_say_weather
         data:
           engine_id: "{{ tts_entity }}"
-          message: "{{ message }}"
-          language: "{{ tts_language | default('') }}"
+          condition: "{{ condition }}"
+          temperature: "{{ temperature }}"
+          unit: "{{ unit }}"
       - delay:
           seconds: 12
       - action: rest_command.nabaztag_clear_leds

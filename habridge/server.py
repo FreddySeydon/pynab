@@ -25,6 +25,42 @@ HA_TOKEN = os.environ.get("HABRIDGE_HA_TOKEN", "")
 HA_TTS_TIMEOUT = float(os.environ.get("HABRIDGE_HA_TTS_TIMEOUT", "30"))
 
 
+WEATHER_CONDITIONS = {
+    "de": {
+        "clear-night": "klar",
+        "cloudy": "bewoelkt",
+        "fog": "neblig",
+        "hail": "hagelig",
+        "lightning": "gewittrig",
+        "lightning-rainy": "gewittrig und regnerisch",
+        "partlycloudy": "teilweise bewoelkt",
+        "pouring": "stark regnerisch",
+        "rainy": "regnerisch",
+        "snowy": "verschneit",
+        "snowy-rainy": "Schneeregen",
+        "sunny": "sonnig",
+        "windy": "windig",
+        "windy-variant": "windig und bewoelkt",
+    },
+    "en": {
+        "clear-night": "clear",
+        "cloudy": "cloudy",
+        "fog": "foggy",
+        "hail": "hailing",
+        "lightning": "stormy",
+        "lightning-rainy": "stormy and rainy",
+        "partlycloudy": "partly cloudy",
+        "pouring": "pouring",
+        "rainy": "rainy",
+        "snowy": "snowy",
+        "snowy-rainy": "snowy and rainy",
+        "sunny": "sunny",
+        "windy": "windy",
+        "windy-variant": "windy and cloudy",
+    },
+}
+
+
 class BridgeError(Exception):
     def __init__(self, status: HTTPStatus, message: str):
         super().__init__(message)
@@ -127,6 +163,44 @@ def get_ha_tts_url(body: Dict[str, Any]) -> str:
         return audio_url
 
     raise BridgeError(HTTPStatus.BAD_GATEWAY, "Home Assistant did not return a TTS URL")
+
+
+def build_weather_message(body: Dict[str, Any]) -> str:
+    language = body.get("message_language", body.get("language", "de"))
+    if not isinstance(language, str):
+        raise BridgeError(HTTPStatus.BAD_REQUEST, "language must be a string")
+    language = language.lower().split("-")[0]
+    if language not in WEATHER_CONDITIONS:
+        language = "de"
+
+    condition = body.get("condition", "unknown")
+    if not isinstance(condition, str) or not condition:
+        condition = "unknown"
+
+    condition_text = WEATHER_CONDITIONS[language].get(condition, condition)
+    temperature = body.get("temperature")
+    unit = body.get("unit")
+    if not isinstance(unit, str) or not unit:
+        unit = "Grad" if language == "de" else "degrees"
+
+    if temperature in (None, "", "unknown", "unavailable"):
+        if language == "de":
+            return f"Das Wetter ist {condition_text}."
+        return f"The weather is {condition_text}."
+
+    if language == "de":
+        spoken_unit = "Grad" if unit in ("°C", "°F", "C", "F") else unit
+        return f"Das Wetter ist {condition_text}, bei {temperature} {spoken_unit}."
+
+    return f"The weather is {condition_text}, {temperature} {unit}."
+
+
+def play_ha_tts(body: Dict[str, Any]) -> Dict[str, Any]:
+    audio_url = get_ha_tts_url(body)
+    packet = build_audio_packet(audio_url, bool(body.get("cancelable", False)))
+    result = send_to_nabd(packet)
+    result["audio_url"] = audio_url
+    return result
 
 
 def validate_info_colors(colors: Any) -> List[Dict[str, str]]:
@@ -250,10 +324,18 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return send_to_nabd(packet)
 
         if path == "/tts/ha":
-            audio_url = get_ha_tts_url(body)
-            packet = build_audio_packet(audio_url, bool(body.get("cancelable", False)))
-            result = send_to_nabd(packet)
-            result["audio_url"] = audio_url
+            return play_ha_tts(body)
+
+        if path == "/weather/say":
+            tts_body = dict(body)
+            tts_body["message"] = build_weather_message(body)
+            if "tts_language" in tts_body:
+                tts_body["language"] = tts_body.pop("tts_language")
+            else:
+                tts_body.pop("language", None)
+            tts_body.pop("message_language", None)
+            result = play_ha_tts(tts_body)
+            result["message"] = tts_body["message"]
             return result
 
         if path == "/packet":
