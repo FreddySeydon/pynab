@@ -4,6 +4,7 @@ import os
 import socket
 import uuid
 from base64 import b64encode
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional, Tuple
@@ -198,11 +199,19 @@ def build_weather_message(body: Dict[str, Any]) -> str:
             return f"Das Wetter ist {condition_text}."
         return f"The weather is {condition_text}."
 
+    temperature_text = str(temperature)
+    try:
+        temperature_text = str(
+            Decimal(str(temperature)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        )
+    except (InvalidOperation, ValueError):
+        pass
+
     if language == "de":
         spoken_unit = "Grad" if unit in ("°C", "°F", "C", "F") else unit
-        return f"Das Wetter ist {condition_text}, bei {temperature} {spoken_unit}."
+        return f"Das Wetter ist {condition_text}, bei {temperature_text} {spoken_unit}."
 
-    return f"The weather is {condition_text}, {temperature} {unit}."
+    return f"The weather is {condition_text}, {temperature_text} {unit}."
 
 
 def color_for_condition(condition: str) -> List[Tuple[int, int, int]]:
