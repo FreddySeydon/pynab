@@ -57,8 +57,27 @@ sudo make install
 sudo reboot
 ```
 
-RFID drivers are optional for the Wyoming voice setup and can be installed
-later if tag reading/writing is needed.
+RFID drivers are optional for the Wyoming voice setup. Install `cr14` for
+the original TagTagTag RFID reader:
+
+```sh
+cd /opt
+sudo git clone https://github.com/pguyot/cr14.git
+sudo chown -R pi:pi cr14
+cd cr14
+make
+sudo make install
+sudo reboot
+```
+
+After reboot, verify:
+
+```sh
+ls -l /dev/rfid0
+```
+
+If the Nabaztag has the 2022 NFC board instead, install `st25r391x` from
+https://github.com/pguyot/st25r391x.
 
 ## Install upstream Wyoming Satellite
 
@@ -109,3 +128,48 @@ Assistant server, typically with openWakeWord.
 `wyoming-bridge.service` is optional. Set `HA_WEBHOOK_URL` in
 `/opt/pynab/wyoming/wyoming.conf` if you want button events to trigger Home
 Assistant automations.
+
+## Voice-focused service profile
+
+The original Pi Zero has little CPU headroom. For a voice-focused setup, keep
+these services enabled:
+
+```text
+nabd.service
+nabweb.service
+nabweb-boot.service
+nabboot.service
+wyoming-satellite.service
+```
+
+Keep `nabtaichid.service` and `nabclockd.service` only if their local sounds
+and animations are still wanted. Any local Pynab service that plays audio can
+compete with Wyoming for the sound card while Assist is listening or speaking.
+
+Disable unused/background services:
+
+```sh
+sudo systemctl disable --now \
+  nab8balld.service \
+  nabairqualityd.service \
+  nabbookd.service \
+  nabiftttd.service \
+  nabmastodond.service \
+  nabradio.service \
+  nabsurprised.service \
+  nabweatherd.service \
+  nabwebhook.service \
+  wyoming-bridge.service
+```
+
+Optional, if wake word reliability is more important than local clock/taichi:
+
+```sh
+sudo systemctl disable --now nabclockd.service nabtaichid.service
+```
+
+Re-enable a service later with:
+
+```sh
+sudo systemctl enable --now <service-name>.service
+```
