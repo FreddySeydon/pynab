@@ -193,25 +193,51 @@ def build_weather_message(body: Dict[str, Any]) -> str:
     unit = body.get("unit")
     if not isinstance(unit, str) or not unit:
         unit = "Grad" if language == "de" else "degrees"
+    wind_speed = body.get("wind_speed")
+    wind_unit = body.get("wind_unit")
+    if not isinstance(wind_unit, str) or not wind_unit:
+        wind_unit = "km/h"
+
+    def rounded_text(value: Any) -> str:
+        value_text = str(value)
+        try:
+            value_text = str(
+                Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            )
+        except (InvalidOperation, ValueError):
+            pass
+        return value_text
 
     if temperature in (None, "", "unknown", "unavailable"):
-        if language == "de":
-            return f"Das Wetter ist {condition_text}."
-        return f"The weather is {condition_text}."
-
-    temperature_text = str(temperature)
-    try:
-        temperature_text = str(
-            Decimal(str(temperature)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        message = (
+            f"Das Wetter ist {condition_text}."
+            if language == "de"
+            else f"The weather is {condition_text}."
         )
-    except (InvalidOperation, ValueError):
-        pass
+    else:
+        temperature_text = rounded_text(temperature)
+        if language == "de":
+            spoken_unit = "Grad" if unit in ("°C", "°F", "C", "F") else unit
+            message = (
+                f"Das Wetter ist {condition_text}, bei "
+                f"{temperature_text} {spoken_unit}."
+            )
+        else:
+            message = f"The weather is {condition_text}, {temperature_text} {unit}."
 
-    if language == "de":
-        spoken_unit = "Grad" if unit in ("°C", "°F", "C", "F") else unit
-        return f"Das Wetter ist {condition_text}, bei {temperature_text} {spoken_unit}."
+    if wind_speed not in (None, "", "unknown", "unavailable"):
+        wind_text = rounded_text(wind_speed)
+        if language == "de":
+            spoken_wind_unit = (
+                "Kilometer pro Stunde"
+                if wind_unit.lower() in ("km/h", "kmh", "kmph")
+                else wind_unit
+            )
+            message += f" Der Wind liegt bei {wind_text} {spoken_wind_unit}."
+        else:
+            message += f" Wind speed is {wind_text} {wind_unit}."
 
-    return f"The weather is {condition_text}, {temperature_text} {unit}."
+    return message
 
 
 def color_for_condition(condition: str) -> List[Tuple[int, int, int]]:

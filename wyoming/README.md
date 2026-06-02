@@ -350,7 +350,8 @@ bridge prepares a German weather sentence before asking Home Assistant TTS for
 an MP3. `/weather/say` attaches a generated smooth LED choreography to the
 audio command and moves the ears inside the same choreography, so active
 weather LEDs keep running while the rabbit speaks and the Home Assistant script
-only needs one bridge call.
+only needs one bridge call. If the Home Assistant weather entity exposes
+`wind_speed`, the spoken sentence also includes rounded wind speed.
 
 To enable bridge speech, create a long-lived access token in Home Assistant and
 set these values in `/opt/pynab/habridge/habridge.conf`:

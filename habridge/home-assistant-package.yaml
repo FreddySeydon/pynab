@@ -61,7 +61,7 @@ rest_command:
     method: post
     content_type: "application/json"
     payload: >
-      {"engine_id":{{ engine_id | to_json }},"condition":{{ condition | to_json }},"temperature":{{ temperature | to_json }},"unit":{{ unit | to_json }},"message_language":"de","cache":true}
+      {"engine_id":{{ engine_id | to_json }},"condition":{{ condition | to_json }},"temperature":{{ temperature | to_json }},"unit":{{ unit | to_json }},"wind_speed":{{ wind_speed | to_json }},"wind_unit":{{ wind_unit | to_json }},"message_language":"de","cache":true}
 
 script:
   nabaztag_move_ears:
@@ -174,9 +174,13 @@ script:
           condition: "{{ states(weather_entity | default('weather.home')) }}"
           temperature: "{{ state_attr(weather_entity | default('weather.home'), 'temperature') }}"
           unit: "{{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'Grad' }}"
+          wind_speed: "{{ state_attr(weather_entity | default('weather.home'), 'wind_speed') }}"
+          wind_unit: "{{ state_attr(weather_entity | default('weather.home'), 'wind_speed_unit') or 'km/h' }}"
       - action: rest_command.nabaztag_say_weather
         data:
           engine_id: "{{ tts_entity }}"
           condition: "{{ condition }}"
           temperature: "{{ temperature }}"
           unit: "{{ unit }}"
+          wind_speed: "{{ wind_speed }}"
+          wind_unit: "{{ wind_unit }}"
