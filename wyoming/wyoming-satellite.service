@@ -6,7 +6,7 @@ After=network.target nabd.service
 Type=simple
 User=pi
 WorkingDirectory=/opt/pynab
-ExecStart=/opt/pynab/venv/bin/python3 -m wyoming_satellite \
+ExecStart=/opt/wyoming-satellite/script/run \
     --name "Nabaztag" \
     --uri "tcp://0.0.0.0:10500" \
     --mic-command "arecord -D plughw:CARD=tagtagtagsound -r 16000 -c 1 -f S16_LE -t raw" \
