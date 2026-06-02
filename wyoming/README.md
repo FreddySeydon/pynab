@@ -208,6 +208,11 @@ Keep `nabtaichid.service` and `nabclockd.service` only if their local sounds
 and animations are still wanted. Any local Pynab service that plays audio can
 compete with Wyoming for the sound card while Assist is listening or speaking.
 
+If `nabclockd.service` stays enabled, open the clock settings in the Pynab web
+interface and enable `Stay awake`. Scheduled sleep puts `nabd` into the
+`asleep` state; Wyoming may still detect the wake word, but LED feedback and
+bridge commands become unreliable until the rabbit wakes up again.
+
 Disable unused/background services. Home Assistant can replace most of these
 with lighter automations while the Nabaztag only handles speech, ears, LEDs,
 RFID, and audio playback:

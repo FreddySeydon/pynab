@@ -66,6 +66,8 @@ class SettingsView(TemplateView):
             config.settings_per_day = (
                 request.POST["settings_per_day"] == "true"
             )
+        if "stay_awake" in request.POST:
+            config.stay_awake = request.POST["stay_awake"] == "true"
         config.save()
         NabClockd.signal_daemon()
         context = self.get_context_data(**kwargs)

@@ -19,7 +19,14 @@
           <button id="distinctTimesBtn" type="button" class="btn btn-toggle{% if config.settings_per_day %} active{% endif %}" data-name="settings_per_day" data-toggle="button" aria-pressed="false" autocomplete="off"><div class="handle"></div></button>
           <input name="settings_per_day" type="hidden" value="{% if config.settings_per_day %}true{% else %}false{% endif %}" />
         </div>
-      </div>      
+      </div>
+      <div class="form-group row">
+        <label for="stayAwakeBtn" class="col-6 col-form-label">{% trans "Stay awake" %}</label>
+        <div class="col-6">
+          <button id="stayAwakeBtn" type="button" class="btn btn-toggle{% if config.stay_awake %} active{% endif %}" data-name="stay_awake" data-toggle="button" aria-pressed="false" autocomplete="off"><div class="handle"></div></button>
+          <input name="stay_awake" type="hidden" value="{% if config.stay_awake %}true{% else %}false{% endif %}" />
+        </div>
+      </div>
       <div id="commonWakeUpTimes" style="{% if config.settings_per_day %}display:none{% endif %}">      
         <div class="form-group row">
           <label for="wakeupTime" class="col-6 col-form-label">{% trans "Wake up time" %}</label>
@@ -239,6 +246,7 @@
       form.find("input[name='chime_hour']").val(form.find("button[id='chimeHoursBtn']").hasClass('active'));
       form.find("input[name='play_wakeup_sleep_sounds']").val(form.find("button[id='playSoundsBtn']").hasClass('active'));
       form.find("input[name='settings_per_day']").val(form.find("button[id='distinctTimesBtn']").hasClass('active'));
+      form.find("input[name='stay_awake']").val(form.find("button[id='stayAwakeBtn']").hasClass('active'));
       var formdata = form.serialize();
       $.ajax({
        url: url,

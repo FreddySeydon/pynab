@@ -136,7 +136,11 @@ class NabClockd(nabservice.NabService):
                         sleep_hour,
                         sleep_min,
                     )
-            if self.config.sleep_wakeup_override is not None:
+            if self.config.stay_awake:
+                should_sleep = False
+                if self.config.sleep_wakeup_override is not None:
+                    response.append("clear_override")
+            elif self.config.sleep_wakeup_override is not None:
                 if should_sleep == self.config.sleep_wakeup_override:
                     response.append("clear_override")
                 else:
@@ -293,7 +297,9 @@ class NabClockd(nabservice.NabService):
             else:
                 type = "sleep"
             async with self.loop_cv:
-                self.config.sleep_wakeup_override = type == "sleep"
+                self.config.sleep_wakeup_override = (
+                    type == "sleep" and not self.config.stay_awake
+                )
                 await self.config.save_async()
                 self.loop_cv.notify()
         elif (
@@ -303,7 +309,9 @@ class NabClockd(nabservice.NabService):
         ):
             if packet["nlu"]["intent"] == "nabclockd/sleep":
                 async with self.loop_cv:
-                    self.config.sleep_wakeup_override = True
+                    self.config.sleep_wakeup_override = (
+                        not self.config.stay_awake
+                    )
                     await self.config.save_async()
                     self.loop_cv.notify()
             elif packet["nlu"]["intent"] == "nabclockd/clock":
