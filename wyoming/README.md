@@ -342,9 +342,12 @@ script.nabaztag_show_weather
 ```
 
 `script.nabaztag_show_weather` always drives ears and weather LEDs through the
-bridge. Its speech step is optional and only runs if you pass a valid Home
-Assistant TTS entity. It uses the bridge `/tts/ha` endpoint, so the Nabaztag
-does not need to appear as a Home Assistant media player.
+bridge. Its speech step uses the bridge `/tts/ha` endpoint, so the Nabaztag
+does not need to appear as a Home Assistant media player. Pass `tts_entity`
+for speech, `tts_language` for the TTS engine language, and
+`message_language` (`de` or `en`) for the spoken weather sentence. The package
+defaults to a German weather sentence (`de`) and only sends `tts_language` if
+you provide one.
 
 To enable bridge speech, create a long-lived access token in Home Assistant and
 set these values in `/opt/pynab/habridge/habridge.conf`:

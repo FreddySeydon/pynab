@@ -54,7 +54,7 @@ rest_command:
     method: post
     content_type: "application/json"
     payload: >
-      {"engine_id":"{{ engine_id }}","message":{{ message | to_json }},"cache":true}
+      {"engine_id":"{{ engine_id }}","message":{{ message | to_json }},"cache":true{% if language is defined and language %},"language":"{{ language }}"{% endif %}}
 
 script:
   nabaztag_move_ears:
@@ -161,6 +161,18 @@ script:
         selector:
           entity:
             domain: tts
+      tts_language:
+        required: false
+        selector:
+          text: {}
+      message_language:
+        required: false
+        default: de
+        selector:
+          select:
+            options:
+              - de
+              - en
     sequence:
       - variables:
           weather_target: "{{ weather_entity | default('weather.home') }}"
@@ -168,8 +180,31 @@ script:
           temperature: "{{ state_attr(weather_entity | default('weather.home'), 'temperature') }}"
           unit: "{{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'degrees' }}"
           message: >-
-            The weather is {{ states(weather_entity | default('weather.home')) }}{% if state_attr(weather_entity | default('weather.home'), 'temperature') is not none %},
+            {% set lang = message_language | default('de') %}
+            {% set condition = states(weather_entity | default('weather.home')) %}
+            {% set condition_de = {
+              'clear-night': 'klar',
+              'cloudy': 'bewölkt',
+              'fog': 'neblig',
+              'hail': 'hagelig',
+              'lightning': 'gewittrig',
+              'lightning-rainy': 'gewittrig und regnerisch',
+              'partlycloudy': 'teilweise bewölkt',
+              'pouring': 'stark regnerisch',
+              'rainy': 'regnerisch',
+              'snowy': 'verschneit',
+              'snowy-rainy': 'Schneeregen',
+              'sunny': 'sonnig',
+              'windy': 'windig',
+              'windy-variant': 'windig und bewölkt'
+            } %}
+            {% if lang == 'de' %}
+            Das Wetter ist {{ condition_de.get(condition, condition) }}{% if state_attr(weather_entity | default('weather.home'), 'temperature') is not none %},
+            bei {{ state_attr(weather_entity | default('weather.home'), 'temperature') }} {{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'Grad' }}{% endif %}.
+            {% else %}
+            The weather is {{ condition }}{% if state_attr(weather_entity | default('weather.home'), 'temperature') is not none %},
             {{ state_attr(weather_entity | default('weather.home'), 'temperature') }} {{ state_attr(weather_entity | default('weather.home'), 'temperature_unit') or 'degrees' }}{% endif %}.
+            {% endif %}
           weather_colors: >-
             {% set condition = states(weather_entity | default('weather.home')) %}
             {% if condition in ['rainy', 'pouring', 'lightning-rainy'] %}
@@ -194,14 +229,11 @@ script:
         data:
           left: 10
           right: 10
-      - if:
-          - condition: template
-            value_template: "{{ tts_entity is defined and tts_entity }}"
-        then:
-          - action: rest_command.nabaztag_say
-            data:
-              engine_id: "{{ tts_entity }}"
-              message: "{{ message }}"
+      - action: rest_command.nabaztag_say
+        data:
+          engine_id: "{{ tts_entity }}"
+          message: "{{ message }}"
+          language: "{{ tts_language | default('') }}"
       - delay:
           seconds: 12
       - action: rest_command.nabaztag_clear_leds
