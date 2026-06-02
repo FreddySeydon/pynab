@@ -6,6 +6,60 @@ speech-to-text, Assist, and text-to-speech.
 
 The original Pi Zero should not run wake word recognition locally.
 
+## Fresh Raspberry Pi OS notes
+
+Use Raspberry Pi OS Legacy 32-bit Lite on an original Pi Zero. Configure a
+2.4 GHz Wi-Fi network and SSH before first boot.
+
+If the image boots as `raspberrypi.local`, rename it before installing Pynab:
+
+```sh
+sudo hostnamectl set-hostname nabaztag
+sudo sed -i 's/raspberrypi/nabaztag/g' /etc/hosts
+sudo reboot
+```
+
+After reboot, connect with:
+
+```sh
+ssh pi@nabaztag.local
+```
+
+Install the base packages that were needed during the fresh setup:
+
+```sh
+sudo apt-get update
+sudo apt-get upgrade -y
+sudo apt-get install -y \
+  git gcc make raspberrypi-kernel-headers \
+  python3 python3-venv python3-dev \
+  postgresql postgresql-contrib libpq-dev \
+  nginx gettext alsa-utils libasound2-dev \
+  libatlas-base-dev libopenblas-dev libblas3 liblapack3
+```
+
+Install the TagTagTag hardware drivers before running Pynab `install.sh`:
+
+```sh
+cd /opt
+sudo git clone -b tagtagtag-sound https://github.com/pguyot/wm8960.git
+sudo chown -R pi:pi wm8960
+cd wm8960
+make
+sudo make install
+
+cd /opt
+sudo git clone https://github.com/pguyot/tagtagtag-ears.git
+sudo chown -R pi:pi tagtagtag-ears
+cd tagtagtag-ears
+make
+sudo make install
+sudo reboot
+```
+
+RFID drivers are optional for the Wyoming voice setup and can be installed
+later if tag reading/writing is needed.
+
 ## Install upstream Wyoming Satellite
 
 Install Wyoming Satellite outside the Pynab virtual environment:
