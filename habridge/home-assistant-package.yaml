@@ -42,6 +42,20 @@ rest_command:
     content_type: "application/json"
     payload: "{}"
 
+  nabaztag_play_mp3_url:
+    url: "http://nabaztag.local:10544/audio/url"
+    method: post
+    content_type: "application/json"
+    payload: >
+      {"url":"{{ url }}","cancelable":{{ cancelable | default(false) | to_json }}}
+
+  nabaztag_say:
+    url: "http://nabaztag.local:10544/tts/ha"
+    method: post
+    content_type: "application/json"
+    payload: >
+      {"engine_id":"{{ engine_id }}","message":{{ message | to_json }},"cache":true}
+
 script:
   nabaztag_move_ears:
     alias: Nabaztag - Move ears
@@ -147,11 +161,6 @@ script:
         selector:
           entity:
             domain: tts
-      media_player_entity:
-        required: false
-        selector:
-          entity:
-            domain: media_player
     sequence:
       - variables:
           weather_target: "{{ weather_entity | default('weather.home') }}"
@@ -187,13 +196,11 @@ script:
           right: 10
       - if:
           - condition: template
-            value_template: "{{ tts_entity is defined and tts_entity and media_player_entity is defined and media_player_entity }}"
+            value_template: "{{ tts_entity is defined and tts_entity }}"
         then:
-          - action: tts.speak
-            target:
-              entity_id: "{{ tts_entity }}"
+          - action: rest_command.nabaztag_say
             data:
-              media_player_entity_id: "{{ media_player_entity }}"
+              engine_id: "{{ tts_entity }}"
               message: "{{ message }}"
       - delay:
           seconds: 12

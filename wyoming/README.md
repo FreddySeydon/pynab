@@ -271,6 +271,8 @@ POST /leds/clear
 POST /ears
 POST /sleep
 POST /wakeup
+POST /audio/url
+POST /tts/ha
 POST /packet
 ```
 
@@ -278,6 +280,7 @@ POST /packet
 
 Optional settings are in `/opt/pynab/habridge/habridge.conf`. Set
 `HABRIDGE_TOKEN` if the bridge should require a bearer token or `?token=...`.
+Set `HABRIDGE_HA_URL` and `HABRIDGE_HA_TOKEN` to enable `/tts/ha`.
 
 Example Home Assistant `rest_command` entries:
 
@@ -339,7 +342,30 @@ script.nabaztag_show_weather
 ```
 
 `script.nabaztag_show_weather` always drives ears and weather LEDs through the
-bridge. Its speech step is optional and only runs if you pass both a valid
-Home Assistant TTS entity and a media player entity. If the Wyoming satellite
-does not appear as a media player target, keep this script LED-only for now and
-add speech as a separate bridge feature later.
+bridge. Its speech step is optional and only runs if you pass a valid Home
+Assistant TTS entity. It uses the bridge `/tts/ha` endpoint, so the Nabaztag
+does not need to appear as a Home Assistant media player.
+
+To enable bridge speech, create a long-lived access token in Home Assistant and
+set these values in `/opt/pynab/habridge/habridge.conf`:
+
+```sh
+HABRIDGE_HA_URL=http://<home-assistant-lan-ip>:8123
+HABRIDGE_HA_TOKEN=<long-lived-access-token>
+```
+
+Keep this token out of git if you later edit files on the Nabaztag.
+
+Restart the bridge after changing the file:
+
+```sh
+sudo systemctl restart habridge.service
+```
+
+Test bridge speech from the Nabaztag:
+
+```sh
+curl -X POST http://127.0.0.1:10544/tts/ha \
+  -H 'Content-Type: application/json' \
+  -d '{"engine_id":"tts.your_tts_entity","message":"The weather bridge is working."}'
+```

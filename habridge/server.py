@@ -7,6 +7,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 
 
 LOG = logging.getLogger("habridge")
@@ -19,6 +20,9 @@ NABD_PORT = int(os.environ.get("HABRIDGE_NABD_PORT", "10543"))
 NABD_TIMEOUT = float(os.environ.get("HABRIDGE_NABD_TIMEOUT", "10"))
 MAX_BODY_BYTES = int(os.environ.get("HABRIDGE_MAX_BODY_BYTES", "65536"))
 DEFAULT_INFO_ID = os.environ.get("HABRIDGE_INFO_ID", "ha_bridge")
+HA_URL = os.environ.get("HABRIDGE_HA_URL", "").rstrip("/")
+HA_TOKEN = os.environ.get("HABRIDGE_HA_TOKEN", "")
+HA_TTS_TIMEOUT = float(os.environ.get("HABRIDGE_HA_TTS_TIMEOUT", "30"))
 
 
 class BridgeError(Exception):
@@ -55,6 +59,74 @@ def send_to_nabd(packet: Dict[str, Any]) -> Dict[str, Any]:
                 )
             if response.get("type") == "response" and response.get("request_id") == request_id:
                 return {"initial_state": initial_state, "response": response}
+
+
+def build_audio_packet(audio_url: str, cancelable: bool = False) -> Dict[str, Any]:
+    if not isinstance(audio_url, str):
+        raise BridgeError(HTTPStatus.BAD_REQUEST, "url must be a string")
+    audio_url = audio_url.strip()
+    if not (audio_url.startswith("http://") or audio_url.startswith("https://")):
+        raise BridgeError(HTTPStatus.BAD_REQUEST, "url must start with http:// or https://")
+    if not urlparse(audio_url).path.lower().endswith(".mp3"):
+        raise BridgeError(HTTPStatus.BAD_REQUEST, "url must point to an MP3 file")
+    return {
+        "type": "command",
+        "sequence": [{"audio": [audio_url]}],
+        "cancelable": bool(cancelable),
+    }
+
+
+def get_ha_tts_url(body: Dict[str, Any]) -> str:
+    if not HA_URL or not HA_TOKEN:
+        raise BridgeError(
+            HTTPStatus.BAD_REQUEST,
+            "HABRIDGE_HA_URL and HABRIDGE_HA_TOKEN must be configured",
+        )
+
+    engine_id = body.get("engine_id")
+    message = body.get("message")
+    if not isinstance(engine_id, str) or not engine_id:
+        raise BridgeError(HTTPStatus.BAD_REQUEST, "engine_id must be a non-empty string")
+    if not isinstance(message, str) or not message:
+        raise BridgeError(HTTPStatus.BAD_REQUEST, "message must be a non-empty string")
+
+    payload: Dict[str, Any] = {
+        "engine_id": engine_id,
+        "message": message,
+        "cache": body.get("cache", True),
+        "options": body.get(
+            "options",
+            {
+                "preferred_format": "mp3",
+                "preferred_sample_rate": 22050,
+                "preferred_sample_channels": 1,
+            },
+        ),
+    }
+    if "language" in body:
+        payload["language"] = body["language"]
+
+    req = Request(
+        HA_URL + "/api/tts_get_url",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": "Bearer " + HA_TOKEN,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urlopen(req, timeout=HA_TTS_TIMEOUT) as response:  # nosec B310
+        response_data = json.loads(response.read().decode("utf-8"))
+
+    path = response_data.get("path")
+    if isinstance(path, str) and path:
+        return HA_URL + path
+
+    audio_url = response_data.get("url")
+    if isinstance(audio_url, str) and audio_url:
+        return audio_url
+
+    raise BridgeError(HTTPStatus.BAD_GATEWAY, "Home Assistant did not return a TTS URL")
 
 
 def validate_info_colors(colors: Any) -> List[Dict[str, str]]:
@@ -172,6 +244,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
         if path == "/wakeup":
             return send_to_nabd({"type": "wakeup"})
+
+        if path == "/audio/url":
+            packet = build_audio_packet(body.get("url"), bool(body.get("cancelable", False)))
+            return send_to_nabd(packet)
+
+        if path == "/tts/ha":
+            audio_url = get_ha_tts_url(body)
+            packet = build_audio_packet(audio_url, bool(body.get("cancelable", False)))
+            result = send_to_nabd(packet)
+            result["audio_url"] = audio_url
+            return result
 
         if path == "/packet":
             packet = body.get("packet", body)
