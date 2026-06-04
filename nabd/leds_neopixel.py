@@ -13,7 +13,7 @@ class LedsNeoPixel(LedsSoft):  # pragma: no cover
     LED_CHANNEL = 1  # set to '1' for GPIOs 13, 19, 41, 45 or 53
     LED_COUNT = 5
 
-    PULSING_RATE = 0.100  # every 100ms
+    PULSING_RATE = 0.050  # every 50ms
 
     def __init__(self):
         super().__init__()

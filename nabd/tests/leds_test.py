@@ -5,6 +5,9 @@ from nabd.leds import Led, LedsSoft
 
 
 class LedsInterface(LedsSoft):
+    PULSING_RATE = 0.01
+    PULSING_STEPS = 4
+
     def __init__(self):
         super().__init__()
         self.calls = []
@@ -46,54 +49,24 @@ class TestLeds(unittest.TestCase):
         )
 
     def test_pulse(self):
-        self.leds.pulse(Led.BOTTOM, 10, 20, 30)
-        time.sleep(8)
+        self.leds.pulse(Led.BOTTOM, 40, 80, 120)
+        time.sleep(0.2)
         self.assertEqual(
-            self.leds.calls[:44],
+            self.leds.calls[:14],
             [
                 ("do_set", Led.BOTTOM, 0, 0, 0),
                 "do_show",
-                ("do_set", Led.BOTTOM, 1, 2, 3),
-                "do_show",
-                ("do_set", Led.BOTTOM, 2, 4, 6),
-                "do_show",
-                ("do_set", Led.BOTTOM, 3, 6, 9),
-                "do_show",
-                ("do_set", Led.BOTTOM, 4, 8, 12),
-                "do_show",
-                ("do_set", Led.BOTTOM, 5, 10, 15),
-                "do_show",
-                ("do_set", Led.BOTTOM, 6, 12, 18),
-                "do_show",
-                ("do_set", Led.BOTTOM, 7, 14, 21),
-                "do_show",
-                ("do_set", Led.BOTTOM, 8, 16, 24),
-                "do_show",
-                ("do_set", Led.BOTTOM, 9, 18, 27),
-                "do_show",
                 ("do_set", Led.BOTTOM, 10, 20, 30),
                 "do_show",
-                ("do_set", Led.BOTTOM, 9, 18, 27),
+                ("do_set", Led.BOTTOM, 20, 40, 60),
                 "do_show",
-                ("do_set", Led.BOTTOM, 8, 16, 24),
+                ("do_set", Led.BOTTOM, 30, 60, 90),
                 "do_show",
-                ("do_set", Led.BOTTOM, 7, 14, 21),
+                ("do_set", Led.BOTTOM, 40, 80, 120),
                 "do_show",
-                ("do_set", Led.BOTTOM, 6, 12, 18),
+                ("do_set", Led.BOTTOM, 30, 60, 90),
                 "do_show",
-                ("do_set", Led.BOTTOM, 5, 10, 15),
-                "do_show",
-                ("do_set", Led.BOTTOM, 4, 8, 12),
-                "do_show",
-                ("do_set", Led.BOTTOM, 3, 6, 9),
-                "do_show",
-                ("do_set", Led.BOTTOM, 2, 4, 6),
-                "do_show",
-                ("do_set", Led.BOTTOM, 1, 2, 3),
-                "do_show",
-                ("do_set", Led.BOTTOM, 0, 0, 0),
-                "do_show",
-                ("do_set", Led.BOTTOM, 1, 2, 3),
+                ("do_set", Led.BOTTOM, 20, 40, 60),
                 "do_show",
             ],
         )

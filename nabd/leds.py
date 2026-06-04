@@ -48,8 +48,8 @@ class LedsSoft(Leds, metaclass=abc.ABCMeta):
     Base implementation with software pulsing.
     """
 
-    PULSING_RATE = 0.200  # every 200ms
-    PULSING_STEPS = 10  # number of steps to reach target color
+    PULSING_RATE = 0.050  # every 50ms
+    PULSING_STEPS = 40  # number of steps to reach target color
 
     def __init__(self):
         self.condition = Condition()
@@ -73,9 +73,9 @@ class LedsSoft(Leds, metaclass=abc.ABCMeta):
                             if self.last_pulse is None:
                                 self.last_pulse = time.time()
                             color_incr = (
-                                r / LedsSoft.PULSING_STEPS,
-                                g / LedsSoft.PULSING_STEPS,
-                                b / LedsSoft.PULSING_STEPS,
+                                r / self.PULSING_STEPS,
+                                g / self.PULSING_STEPS,
+                                b / self.PULSING_STEPS,
                             )
                             self.pulsing[led] = (
                                 (r, g, b),
@@ -92,10 +92,10 @@ class LedsSoft(Leds, metaclass=abc.ABCMeta):
                 next_pulse = None
                 if len(self.pulsing) > 0:
                     now = time.time()
-                    next_pulse = self.last_pulse + LedsSoft.PULSING_RATE
+                    next_pulse = self.last_pulse + self.PULSING_RATE
                     if now >= next_pulse:
                         self.last_pulse = next_pulse
-                        next_pulse = next_pulse + LedsSoft.PULSING_RATE
+                        next_pulse = next_pulse + self.PULSING_RATE
                         new_pulsing = {}
                         for led, pulse in self.pulsing.items():
                             (
