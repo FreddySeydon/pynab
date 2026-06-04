@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import socket
+import subprocess
 import uuid
 from base64 import b64encode
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -25,6 +26,14 @@ DEFAULT_INFO_ID = os.environ.get("HABRIDGE_INFO_ID", "ha_bridge")
 HA_URL = os.environ.get("HABRIDGE_HA_URL", "").rstrip("/")
 HA_TOKEN = os.environ.get("HABRIDGE_HA_TOKEN", "")
 HA_TTS_TIMEOUT = float(os.environ.get("HABRIDGE_HA_TTS_TIMEOUT", "30"))
+QUIET_SERVICES = [
+    service.strip()
+    for service in os.environ.get(
+        "HABRIDGE_QUIET_SERVICES",
+        "nabclockd.service,nabsurprised.service,nabtaichid.service",
+    ).split(",")
+    if service.strip()
+]
 
 
 WEATHER_CONDITIONS = {
@@ -97,6 +106,52 @@ def send_to_nabd(packet: Dict[str, Any]) -> Dict[str, Any]:
                 )
             if response.get("type") == "response" and response.get("request_id") == request_id:
                 return {"initial_state": initial_state, "response": response}
+
+
+def run_systemctl(action: str, services: List[str]) -> List[Dict[str, Any]]:
+    results = []
+    for service in services:
+        completed = subprocess.run(
+            ["systemctl", action, service],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        results.append(
+            {
+                "service": service,
+                "action": action,
+                "returncode": completed.returncode,
+                "stdout": completed.stdout.strip(),
+                "stderr": completed.stderr.strip(),
+            }
+        )
+    return results
+
+
+def validate_bool(value: Any, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise BridgeError(HTTPStatus.BAD_REQUEST, f"{name} must be a boolean")
+    return value
+
+
+def set_quiet_mode(enabled: bool) -> Dict[str, Any]:
+    nabd_result = send_to_nabd(
+        {
+            "type": "config-update",
+            "service": "nabd",
+            "slot": "quiet_mode",
+            "value": enabled,
+        }
+    )
+    action = "stop" if enabled else "start"
+    service_results = run_systemctl(action, QUIET_SERVICES)
+    return {
+        "quiet_mode": enabled,
+        "nabd": nabd_result,
+        "services": service_results,
+    }
 
 
 def build_audio_packet(audio_url: str, cancelable: bool = False) -> Dict[str, Any]:
@@ -445,6 +500,15 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
         if path == "/wakeup":
             return send_to_nabd({"type": "wakeup"})
+
+        if path == "/quiet":
+            return set_quiet_mode(validate_bool(body.get("enabled"), "enabled"))
+
+        if path == "/quiet/on":
+            return set_quiet_mode(True)
+
+        if path == "/quiet/off":
+            return set_quiet_mode(False)
 
         if path == "/audio/url":
             packet = build_audio_packet(body.get("url"), bool(body.get("cancelable", False)))

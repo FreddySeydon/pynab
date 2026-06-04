@@ -299,6 +299,9 @@ curl -X POST http://127.0.0.1:10544/leds/info \
 curl -X POST http://127.0.0.1:10544/leds/clear \
   -H 'Content-Type: application/json' \
   -d '{"info_id":"ha_test"}'
+
+curl -X POST http://127.0.0.1:10544/quiet/on
+curl -X POST http://127.0.0.1:10544/quiet/off
 ```
 
 The bridge supports:
@@ -310,6 +313,9 @@ POST /leds/clear
 POST /ears
 POST /sleep
 POST /wakeup
+POST /quiet
+POST /quiet/on
+POST /quiet/off
 POST /audio/url
 POST /tts/ha
 POST /weather/say
@@ -317,6 +323,21 @@ POST /packet
 ```
 
 `/packet` sends a raw `nabd` packet and is useful for experiments.
+`/quiet` accepts `{"enabled":true}` or `{"enabled":false}`. `/quiet/on`
+and `/quiet/off` are shortcuts.
+
+Quiet mode is intended for media-center or evening use. It keeps `nabd`,
+`nabwebhook`, `habridge`, and `wyoming-satellite` available, but it turns off
+the `nabd` bottom status LED pulse and stops the local clock, surprise, and
+taichi daemons. By default the bridge controls:
+
+```text
+nabclockd.service
+nabsurprised.service
+nabtaichid.service
+```
+
+Override that list in `habridge.conf` with `HABRIDGE_QUIET_SERVICES` if needed.
 
 Optional settings are in `/opt/pynab/habridge/habridge.conf`. Set
 `HABRIDGE_TOKEN` if the bridge should require a bearer token or `?token=...`.
@@ -378,6 +399,8 @@ script.nabaztag_led_effect
 script.nabaztag_clear_led_effect
 script.nabaztag_sleep
 script.nabaztag_wakeup
+script.nabaztag_quiet_on
+script.nabaztag_quiet_off
 script.nabaztag_show_weather
 ```
 

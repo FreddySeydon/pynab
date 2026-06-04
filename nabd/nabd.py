@@ -129,6 +129,9 @@ class Nabd:
         self.nlu: Optional[NLU] = None
         self._asr_locale: Optional[str] = None
         self._nlu_locale: Optional[str] = None
+        from . import i18n
+
+        self.quiet_mode = i18n.Config.load().quiet_mode
 
     async def _init_asr_nlu(self):
         from . import i18n
@@ -147,12 +150,14 @@ class Nabd:
         """
         Reload configuration.
         """
+        from . import i18n
+
+        config = await i18n.Config.load_async()
+        self.quiet_mode = config.quiet_mode
         if self.nabio.has_sound_input():
-            from . import i18n
             from .asr import ASR
             from .nlu import NLU
 
-            config = await i18n.Config.load_async()
             new_asr_locale = ASR.get_locale(config.locale)
             new_nlu_locale = NLU.get_locale(config.locale)
             if new_asr_locale != self._asr_locale:
@@ -170,7 +175,13 @@ class Nabd:
                 self.nlu = NLU(self._nlu_locale)
                 Nabd.leds_boot(self.nabio, 4)
             self.nabio.set_leds(None, None, None, None, None)
-        self.nabio.pulse(Led.BOTTOM, (255, 0, 255))  # Fuchsia
+        self.apply_status_led()
+
+    def apply_status_led(self):
+        if self.quiet_mode:
+            self.nabio.set_leds(None, None, None, None, None)
+        else:
+            self.nabio.pulse(Led.BOTTOM, (255, 0, 255))  # Fuchsia
 
     async def _do_transition_to_idle(self):
         """
@@ -179,8 +190,11 @@ class Nabd:
         Thread: service or idle_worker_loop
         """
         left, right = self.ears["left"], self.ears["right"]
-        await self.nabio.move_ears_with_leds((255, 0, 255), left, right)
-        self.nabio.pulse(Led.BOTTOM, (255, 0, 255))  # Fuchsia
+        move_color = None if self.quiet_mode else (255, 0, 255)
+        await self.nabio.move_ears_with_leds(move_color, left, right)
+        self.apply_status_led()
+        if self.quiet_mode:
+            return
         if network.ip_address(self.nabio.network_interface()) is None:
             # not even a local network connection: real bad
             logging.error("no network connection")
@@ -686,6 +700,7 @@ class Nabd:
             "state": self.state.value,
             "connections": len(self.service_writers),
             "hardware": await self.nabio.gestalt(),
+            "quiet_mode": self.quiet_mode,
         }
         if stdout:
             uptime = int(stdout.decode().strip())
@@ -708,6 +723,25 @@ class Nabd:
             if packet["service"] == "nabd":
                 if "slot" in packet and packet["slot"] == "locale":
                     await self.reload_config()
+                    self.write_response_packet(packet, STATUS_OK, writer)
+                elif "slot" in packet and packet["slot"] == "quiet_mode":
+                    if not isinstance(packet.get("value"), bool):
+                        self.write_response_packet(
+                            packet,
+                            status_error_malformed_packet(
+                                "quiet_mode value must be a boolean"
+                            ),
+                            writer,
+                        )
+                        return
+                    from . import i18n
+
+                    config = await i18n.Config.load_async()
+                    config.quiet_mode = packet["value"]
+                    await config.save_async()
+                    self.quiet_mode = config.quiet_mode
+                    if self.state == State.IDLE:
+                        self.apply_status_led()
                     self.write_response_packet(packet, STATUS_OK, writer)
 
     async def process_test_packet(

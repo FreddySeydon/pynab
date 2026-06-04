@@ -42,6 +42,18 @@ rest_command:
     content_type: "application/json"
     payload: "{}"
 
+  nabaztag_quiet_on:
+    url: "http://nabaztag.local:10544/quiet/on"
+    method: post
+    content_type: "application/json"
+    payload: "{}"
+
+  nabaztag_quiet_off:
+    url: "http://nabaztag.local:10544/quiet/off"
+    method: post
+    content_type: "application/json"
+    payload: "{}"
+
   nabaztag_play_mp3_url:
     url: "http://nabaztag.local:10544/audio/url"
     method: post
@@ -152,6 +164,18 @@ script:
       - action: rest_command.nabaztag_clear_leds
         data:
           info_id: ha_weather
+
+  nabaztag_quiet_on:
+    alias: Nabaztag - Quiet mode on
+    mode: single
+    sequence:
+      - action: rest_command.nabaztag_quiet_on
+
+  nabaztag_quiet_off:
+    alias: Nabaztag - Quiet mode off
+    mode: single
+    sequence:
+      - action: rest_command.nabaztag_quiet_off
 
   nabaztag_show_weather:
     alias: Nabaztag - Show weather
