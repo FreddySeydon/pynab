@@ -338,6 +338,9 @@ nabtaichid.service
 ```
 
 Override that list in `habridge.conf` with `HABRIDGE_QUIET_SERVICES` if needed.
+The same quiet-mode toggle is also available on the Pynab web interface home
+page. Override the service list used by the web interface with
+`NABWEB_QUIET_SERVICES` if needed.
 
 Optional settings are in `/opt/pynab/habridge/habridge.conf`. Set
 `HABRIDGE_TOKEN` if the bridge should require a bearer token or `?token=...`.

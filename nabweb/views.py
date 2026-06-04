@@ -21,6 +21,15 @@ from nabcommon import hardware
 from nabcommon.nabservice import NabService
 from nabd.i18n import Config
 
+QUIET_SERVICES = [
+    service.strip()
+    for service in os.environ.get(
+        "NABWEB_QUIET_SERVICES",
+        "nabclockd.service,nabsurprised.service,nabtaichid.service",
+    ).split(",")
+    if service.strip()
+]
+
 
 class NabdConnection:
     async def __aenter__(self):
@@ -74,7 +83,11 @@ class BaseView(View, metaclass=abc.ABCMeta):
             (to_locale(lang), name, to_locale(lang) == user_locale)
             for (lang, name) in settings.LANGUAGES
         ]
-        return {"current_locale": user_locale, "locales": locales}
+        return {
+            "current_locale": user_locale,
+            "locales": locales,
+            "quiet_mode": config.quiet_mode,
+        }
 
     def get(self, request, *args, **kwargs):
         context = self.get_context()
@@ -112,10 +125,25 @@ class NabWebView(BaseView):
         return context
 
     def post(self, request, *args, **kwargs):
+        config = Config.load()
+        config_changed = False
         if "locale" in request.POST:
-            config = Config.load()
             config.locale = request.POST["locale"]
+            config_changed = True
+        if "quiet_mode" in request.POST:
+            quiet_mode = request.POST["quiet_mode"] == "true"
+            if config.quiet_mode != quiet_mode:
+                config.quiet_mode = quiet_mode
+                config_changed = True
+                self.apply_quiet_services(quiet_mode)
+                asyncio.run(
+                    self.notify_config_update(
+                        "nabd", "quiet_mode", quiet_mode
+                    )
+                )
+        if config_changed:
             config.save()
+        if "locale" in request.POST:
             asyncio.run(self.notify_config_update("nabd", "locale"))
             user_language = to_language(config.locale)
             translation.activate(user_language)
@@ -123,18 +151,34 @@ class NabWebView(BaseView):
         context = self.get_context()
         return render(request, self.template_name(), context=context)
 
-    async def notify_config_update(self, service, slot):
+    def apply_quiet_services(self, enabled):
+        action = "stop" if enabled else "start"
+        for service in QUIET_SERVICES:
+            subprocess.run(
+                ["systemctl", action, service],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+
+    async def notify_config_update(self, service, slot, value=None):
         await NabdConnection.transaction(
-            self._do_notify_config_update, service, slot
+            self._do_notify_config_update, service, slot, value
         )
 
-    async def _do_notify_config_update(self, reader, writer, service, slot):
+    async def _do_notify_config_update(
+        self, reader, writer, service, slot, value=None
+    ):
         try:
-            packet = (
-                f'{{"type":"config-update","service":"{service}",'
-                f'"slot":"{slot}"}}\r\n'
-            )
-            writer.write(packet.encode("utf-8"))
+            packet = {
+                "type": "config-update",
+                "service": service,
+                "slot": slot,
+            }
+            if value is not None:
+                packet["value"] = value
+            writer.write((json.dumps(packet) + "\r\n").encode("utf-8"))
             await writer.drain()
             writer.close()
         except Exception:
