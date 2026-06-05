@@ -279,6 +279,49 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now habridge.service
 ```
 
+### Applying branch updates
+
+After pulling new commits on an already-installed Nabaztag, run migrations for
+any changed Django apps and restart the affected services. The recent voice
+branch changes added `nabd.quiet_mode` and `nabclockd.stay_awake`, so this is a
+good general update command:
+
+```sh
+cd /opt/pynab
+git pull --ff-only
+venv/bin/python manage.py migrate nabd nabclockd
+sudo systemctl restart nabd.service nabweb.service habridge.service nabclockd.service
+```
+
+If `habridge/habridge.conf` was edited locally for Home Assistant URL/token,
+do not commit it. If a pull conflicts with that file, keep a local copy,
+restore the tracked template, pull, then copy the local config back:
+
+```sh
+cp habridge/habridge.conf /tmp/habridge.conf.local
+git restore habridge/habridge.conf
+git pull --ff-only
+cp /tmp/habridge.conf.local habridge/habridge.conf
+sudo systemctl restart habridge.service
+```
+
+When `habridge/home-assistant-package.yaml` changes, copy it back into Home
+Assistant and restart/reload Home Assistant. Example with the current Unraid
+Docker setup:
+
+From Windows:
+
+```powershell
+scp C:\Code\pynab\habridge\home-assistant-package.yaml root@tower.local:/root/home-assistant-package.yaml
+```
+
+From the Unraid server:
+
+```sh
+docker cp /root/home-assistant-package.yaml bf8dcc8415e0:/config/packages/nabaztag.yaml
+docker restart bf8dcc8415e0
+```
+
 Check it locally:
 
 ```sh
@@ -453,7 +496,7 @@ Test bridge weather speech from the Nabaztag:
 ```sh
 curl -X POST http://127.0.0.1:10544/weather/say \
   -H 'Content-Type: application/json' \
-  -d '{"engine_id":"tts.your_tts_entity","condition":"rainy","temperature":"12","unit":"°C","language":"de"}'
+  -d '{"engine_id":"tts.your_tts_entity","condition":"rainy","temperature":"12","unit":"C","language":"de"}'
 ```
 
 If `/tts/ha` returns `status: ok` but the speaker only crackles or stays silent,
