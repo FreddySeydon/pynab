@@ -209,9 +209,10 @@ and animations are still wanted. Any local Pynab service that plays audio can
 compete with Wyoming for the sound card while Assist is listening or speaking.
 
 If `nabclockd.service` stays enabled, open the clock settings in the Pynab web
-interface and enable `Stay awake`. Scheduled sleep puts `nabd` into the
-`asleep` state; Wyoming may still detect the wake word, but LED feedback and
-bridge commands become unreliable until the rabbit wakes up again.
+interface and enable `Stay awake`. This keeps hourly chimes available while
+disabling scheduled Pynab sleep. Scheduled sleep puts `nabd` into the `asleep`
+state; Wyoming may still detect the wake word, but LED feedback and bridge
+commands become unreliable until the rabbit wakes up again.
 
 Disable unused/background services. Home Assistant can replace most of these
 with lighter automations while the Nabaztag only handles speech, ears, LEDs,
@@ -398,8 +399,9 @@ ha_bridge,ha_effect,ha_weather,ha_test,nabweatherd,nabweatherd_rain
 
 Quiet mode is intended for media-center or evening use. It keeps `nabd`,
 `nabwebhook`, `habridge`, and `wyoming-satellite` available, but it turns off
-the `nabd` bottom status LED pulse and stops the local clock, surprise, and
-taichi daemons. By default the bridge controls:
+the `nabd` bottom status LED pulse, moves both ears to the sleeping position
+`10`, and stops the local clock, surprise, and taichi daemons. Turning quiet
+mode off moves both ears back to `0`. By default the bridge controls:
 
 ```text
 nabclockd.service
@@ -552,6 +554,9 @@ white  thinking after STT
 green  TTS speaking
 red    Wyoming received an error event
 ```
+
+On wake word detection/STT start, the ears move to `4`, a slightly-forward
+listening position. This avoids using the sleeping ear position for listening.
 
 A red center LED is therefore meaningful. For example, Home Assistant can send
 `stt-provider-missing` if an Assist pipeline references an STT provider that is

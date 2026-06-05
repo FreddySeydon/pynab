@@ -133,13 +133,14 @@ wyoming-bridge.service
 ```
 
 `nabclockd` has a `Stay awake` setting in the web UI. Enable it if `nabclockd`
-is running. Scheduled sleep made Wyoming/LED feedback unreliable after the
-rabbit went to sleep.
+is running. It preserves hourly chimes while disabling scheduled Pynab sleep.
+Scheduled sleep made Wyoming/LED feedback unreliable after the rabbit went to
+sleep.
 
 Quiet mode is designed for living-room/media-center use. It leaves voice and
-RFID available, turns off the fuchsia bottom status pulse, and stops local
-clock/surprise/taichi services. It is exposed in the web UI and through the
-bridge:
+RFID available, turns off the fuchsia bottom status pulse, moves ears to the
+sleeping position `10`, and stops local clock/surprise/taichi services. Quiet
+off moves ears back to `0`. It is exposed in the web UI and through the bridge:
 
 ```sh
 curl -X POST http://127.0.0.1:10544/quiet/on
@@ -340,6 +341,7 @@ The center front red LED is a Wyoming/HA pipeline error status from
 was Home Assistant reporting `stt-provider-missing` for
 `stt.faster_whisper_2`. Fix the Home Assistant Assist pipeline first, then
 restart Wyoming from the web UI, `/wyoming/restart`, or `systemctl`.
+Wyoming wake/STT-start moves both ears to `4`, not the sleeping posture.
 
 ## Code Areas
 

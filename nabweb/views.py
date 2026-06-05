@@ -147,6 +147,7 @@ class NabWebView(BaseView):
                         "nabd", "quiet_mode", quiet_mode
                     )
                 )
+                asyncio.run(self.apply_quiet_ears(quiet_mode))
         if config_changed:
             config.save()
         if "locale" in request.POST:
@@ -168,6 +169,24 @@ class NabWebView(BaseView):
                 timeout=15,
                 check=False,
             )
+
+    async def apply_quiet_ears(self, enabled):
+        await NabdConnection.transaction(self._do_apply_quiet_ears, enabled)
+
+    async def _do_apply_quiet_ears(self, reader, writer, enabled):
+        position = 10 if enabled else 0
+        try:
+            packet = {
+                "type": "ears",
+                "left": position,
+                "right": position,
+                "request_id": "quiet-ears",
+            }
+            writer.write((json.dumps(packet) + "\r\n").encode("utf-8"))
+            await writer.drain()
+            writer.close()
+        except Exception:
+            pass
 
     def restart_wyoming(self):
         completed = subprocess.run(

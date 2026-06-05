@@ -26,7 +26,7 @@ def main():
         send_to_nabd({"type": "ears", "left": 0, "right": 0})
     
     elif event == "detection" or event == "stt-start":
-        # Wake word detected / speaking: Solid Blue nose light, ears forward (10, 10)
+        # Wake word detected / listening: blue center light, ears slightly forward.
         send_to_nabd({
             "type": "info",
             "info_id": "wyoming",
@@ -35,7 +35,7 @@ def main():
                 "colors": [{"left": "000000", "center": "0000ff", "right": "000000"}]
             }
         })
-        send_to_nabd({"type": "ears", "left": 10, "right": 10})
+        send_to_nabd({"type": "ears", "left": 4, "right": 4})
 
     elif event == "stt-stop":
         # Thinking: Blink center nose light white rapidly

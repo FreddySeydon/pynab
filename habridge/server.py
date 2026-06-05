@@ -155,9 +155,13 @@ def set_quiet_mode(enabled: bool) -> Dict[str, Any]:
     )
     action = "stop" if enabled else "start"
     service_results = run_systemctl(action, QUIET_SERVICES)
+    ears_result = send_to_nabd(
+        {"type": "ears", "left": 10 if enabled else 0, "right": 10 if enabled else 0}
+    )
     return {
         "quiet_mode": enabled,
         "nabd": nabd_result,
+        "ears": ears_result,
         "services": service_results,
     }
 
