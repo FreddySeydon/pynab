@@ -300,6 +300,8 @@ curl -X POST http://127.0.0.1:10544/leds/clear \
   -H 'Content-Type: application/json' \
   -d '{"info_id":"ha_test"}'
 
+curl -X POST http://127.0.0.1:10544/leds/reset
+
 curl -X POST http://127.0.0.1:10544/quiet/on
 curl -X POST http://127.0.0.1:10544/quiet/off
 ```
@@ -310,6 +312,7 @@ The bridge supports:
 GET  /health
 POST /leds/info
 POST /leds/clear
+POST /leds/reset
 POST /ears
 POST /sleep
 POST /wakeup
@@ -322,7 +325,9 @@ POST /weather/say
 POST /packet
 ```
 
-`/packet` sends a raw `nabd` packet and is useful for experiments.
+`/leds/clear` clears a named idle info animation. `/leds/reset` sends a direct
+all-LEDs-off command, which is useful when a command choreography leaves a LED
+stuck on. `/packet` sends a raw `nabd` packet and is useful for experiments.
 `/quiet` accepts `{"enabled":true}` or `{"enabled":false}`. `/quiet/on`
 and `/quiet/off` are shortcuts.
 
@@ -400,6 +405,7 @@ The package adds scripts for:
 script.nabaztag_move_ears
 script.nabaztag_led_effect
 script.nabaztag_clear_led_effect
+script.nabaztag_reset_leds
 script.nabaztag_sleep
 script.nabaztag_wakeup
 script.nabaztag_quiet_on

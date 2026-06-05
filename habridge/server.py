@@ -352,6 +352,24 @@ def choreography_data_uri(
     )
 
 
+def all_leds_off_choreography_data_uri() -> str:
+    data = bytearray([0, 1, 1])  # one wait unit is 10ms
+    for led_index in (0, 1, 2, 3, 4):
+        data.extend([0, 7, led_index, 0, 0, 0, 0, 0])
+    return (
+        "data:application/x-nabaztag-mtl-choreography;base64,"
+        + b64encode(bytes(data)).decode("ascii")
+    )
+
+
+def build_led_reset_packet() -> Dict[str, Any]:
+    return {
+        "type": "command",
+        "sequence": [{"choreography": all_leds_off_choreography_data_uri()}],
+        "cancelable": False,
+    }
+
+
 def build_weather_choreographies(condition: str) -> Tuple[str, str]:
     colors = color_for_condition(condition)
     off = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
@@ -484,6 +502,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             if not isinstance(info_id, str) or not info_id:
                 raise BridgeError(HTTPStatus.BAD_REQUEST, "info_id must be a non-empty string")
             return send_to_nabd({"type": "info", "info_id": info_id})
+
+        if path == "/leds/reset":
+            return send_to_nabd(build_led_reset_packet())
 
         if path == "/ears":
             left = validate_ear(body.get("left"), "left")

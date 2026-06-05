@@ -30,6 +30,12 @@ rest_command:
     payload: >
       {"info_id":"{{ info_id }}"}
 
+  nabaztag_reset_leds:
+    url: "http://nabaztag.local:10544/leds/reset"
+    method: post
+    content_type: "application/json"
+    payload: "{}"
+
   nabaztag_sleep:
     url: "http://nabaztag.local:10544/sleep"
     method: post
@@ -142,6 +148,12 @@ script:
       - action: rest_command.nabaztag_clear_leds
         data:
           info_id: "{{ info_id | default('ha_effect') }}"
+
+  nabaztag_reset_leds:
+    alias: Nabaztag - Reset LEDs
+    mode: queued
+    sequence:
+      - action: rest_command.nabaztag_reset_leds
 
   nabaztag_sleep:
     alias: Nabaztag - Sleep
