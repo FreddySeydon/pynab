@@ -380,7 +380,9 @@ class Nabd:
         """Process an info packet"""
         packet = self.__check_info_packet(any_packet, writer)
         if packet:
-            if "animation" in packet:
+            if packet.get("clear_all"):
+                self.info.clear()
+            elif "animation" in packet:
                 self.info[packet["info_id"]] = packet["animation"]
             elif packet["info_id"] in self.info:
                 del self.info[packet["info_id"]]
@@ -444,6 +446,25 @@ class Nabd:
                     packet,
                     status_error_malformed_packet(
                         "Missing required colors slot in animation"
+                    ),
+                    writer,
+                )
+                return None
+        if "clear_all" in packet:
+            if not isinstance(packet["clear_all"], bool):
+                self.write_response_packet(
+                    packet,
+                    status_error_malformed_packet(
+                        "Invalid clear_all slot, expected a boolean"
+                    ),
+                    writer,
+                )
+                return None
+            if packet["clear_all"] and "animation" in packet:
+                self.write_response_packet(
+                    packet,
+                    status_error_malformed_packet(
+                        "Invalid info packet, clear_all cannot be combined with animation"
                     ),
                     writer,
                 )

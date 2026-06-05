@@ -222,6 +222,37 @@ class TestNabd(TestNabdBase):
         finally:
             s1.close()
 
+    def test_info_clear_all(self):
+        s1 = self.service_socket()
+        try:
+            packet = s1.readline()  # state packet
+            s1.write(
+                b'{"type":"info",'
+                b'"info_id":"weather","request_id":"set_weather",'
+                b'"animation":{"tempo":25,"colors":['
+                b'{"left":"ff0000","center":"ff0000","right":"ff0000"}]}}'
+                b"\r\n"
+            )
+            packet = s1.readline()  # response packet
+            packet_j = json.loads(packet.decode("utf8"))
+            self.assertEqual(packet_j["type"], "response")
+            self.assertEqual(packet_j["request_id"], "set_weather")
+            self.assertEqual(packet_j["status"], "ok")
+            self.assertIn("weather", self.nabd.info)
+
+            s1.write(
+                b'{"type":"info","info_id":"reset",'
+                b'"request_id":"clear_all","clear_all":true}\r\n'
+            )
+            packet = s1.readline()  # response packet
+            packet_j = json.loads(packet.decode("utf8"))
+            self.assertEqual(packet_j["type"], "response")
+            self.assertEqual(packet_j["request_id"], "clear_all")
+            self.assertEqual(packet_j["status"], "ok")
+            self.assertEqual(self.nabd.info, {})
+        finally:
+            s1.close()
+
     def test_info(self):
         s1 = self.service_socket()
         self.assertEqual(self.nabio.played_infos, [])

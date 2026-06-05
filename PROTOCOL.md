@@ -72,6 +72,7 @@ Modification de l'animation visuelle du lapin, c'est-à-dire ce qu'il affiche au
 Émetteurs: services
 
 - `{"type":"info","request_id":request_id,"info_id":info_id,"animation":animation}`
+- `{"type":"info","request_id":request_id,"info_id":info_id,"clear_all":true}`
 
 Le slot `"request_id"`est optionnel et est retourné dans la réponse.
 
@@ -90,6 +91,9 @@ Tous les slots sont optionnels (`{}` = toutes les leds sont éteintes).
 `color` peut être :
 -  un nombre de 0 à 15 représentant une valeur dans la palette originale (0 = noir, 15 = orange)
 -  un texte représentant la couleur au format HTML ('#' suivi de 3 octets en hexa) ou symbolique
+
+Le slot `"clear_all"`, optionnel, supprime toutes les animations visuelles
+enregistrées. Il ne peut pas être combiné avec `"animation"`.
 
 ## Paquets `ears`
 

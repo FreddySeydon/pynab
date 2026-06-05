@@ -23,6 +23,14 @@ NABD_PORT = int(os.environ.get("HABRIDGE_NABD_PORT", "10543"))
 NABD_TIMEOUT = float(os.environ.get("HABRIDGE_NABD_TIMEOUT", "10"))
 MAX_BODY_BYTES = int(os.environ.get("HABRIDGE_MAX_BODY_BYTES", "65536"))
 DEFAULT_INFO_ID = os.environ.get("HABRIDGE_INFO_ID", "ha_bridge")
+RESET_INFO_IDS = [
+    info_id.strip()
+    for info_id in os.environ.get(
+        "HABRIDGE_RESET_INFO_IDS",
+        f"{DEFAULT_INFO_ID},ha_effect,ha_weather,ha_test,nabweatherd,nabweatherd_rain",
+    ).split(",")
+    if info_id.strip()
+]
 HA_URL = os.environ.get("HABRIDGE_HA_URL", "").rstrip("/")
 HA_TOKEN = os.environ.get("HABRIDGE_HA_TOKEN", "")
 HA_TTS_TIMEOUT = float(os.environ.get("HABRIDGE_HA_TTS_TIMEOUT", "30"))
@@ -370,6 +378,26 @@ def build_led_reset_packet() -> Dict[str, Any]:
     }
 
 
+def reset_leds() -> Dict[str, Any]:
+    clear_all = send_to_nabd(
+        {"type": "info", "info_id": "habridge_reset", "clear_all": True}
+    )
+    cleared = []
+    for info_id in RESET_INFO_IDS:
+        cleared.append(
+            {
+                "info_id": info_id,
+                "nabd": send_to_nabd({"type": "info", "info_id": info_id}),
+            }
+        )
+    return {
+        "status": "ok",
+        "clear_all": clear_all,
+        "cleared_info_ids": cleared,
+        "reset": send_to_nabd(build_led_reset_packet()),
+    }
+
+
 def build_weather_choreographies(condition: str) -> Tuple[str, str]:
     colors = color_for_condition(condition)
     off = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
@@ -504,7 +532,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return send_to_nabd({"type": "info", "info_id": info_id})
 
         if path == "/leds/reset":
-            return send_to_nabd(build_led_reset_packet())
+            return reset_leds()
 
         if path == "/ears":
             left = validate_ear(body.get("left"), "left")

@@ -368,11 +368,19 @@ POST /weather/say
 POST /packet
 ```
 
-`/leds/clear` clears a named idle info animation. `/leds/reset` sends a direct
-all-LEDs-off command, which is useful when a command choreography leaves a LED
-stuck on. `/packet` sends a raw `nabd` packet and is useful for experiments.
+`/leds/clear` clears a named idle info animation. `/leds/reset` clears `nabd`'s
+stored info animations and then sends a direct all-LEDs-off command, which is
+useful when a command choreography or idle animation leaves a LED stuck on.
+`/packet` sends a raw `nabd` packet and is useful for experiments.
 `/quiet` accepts `{"enabled":true}` or `{"enabled":false}`. `/quiet/on`
 and `/quiet/off` are shortcuts.
+
+The reset route also sends compatibility clears for the comma-separated
+`HABRIDGE_RESET_INFO_IDS` list. The default list is:
+
+```text
+ha_bridge,ha_effect,ha_weather,ha_test,nabweatherd,nabweatherd_rain
+```
 
 Quiet mode is intended for media-center or evening use. It keeps `nabd`,
 `nabwebhook`, `habridge`, and `wyoming-satellite` available, but it turns off

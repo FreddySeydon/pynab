@@ -97,6 +97,7 @@ else:
     class InfoPacket(_InfoPacketBase, total=False):
         request_id: str
         animation: Animation
+        clear_all: bool
 
     class _EarsPacketBase(TypedDict):
         type: Literal["ears"]
