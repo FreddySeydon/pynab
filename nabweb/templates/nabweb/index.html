@@ -42,10 +42,20 @@
                 <input name="quiet_mode" type="hidden" value="{% if quiet_mode %}true{% else %}false{% endif %}" />
               </div>
             </div>
+            <hr>
+            <p>{% trans "Restart the Home Assistant voice satellite if the Assist pipeline recovered after an error." %}</p>
+            {% if wyoming_restart_result %}
+              {% if wyoming_restart_result.returncode == 0 %}
+                <div class="alert alert-success">{% trans "Wyoming satellite restart requested." %}</div>
+              {% else %}
+                <div class="alert alert-danger">{% trans "Wyoming satellite restart failed." %} {{ wyoming_restart_result.stderr }}</div>
+              {% endif %}
+            {% endif %}
           </div>
           <div class="card-footer">
             <div class="row mb-2">
               <div class="col-12">
+                <button type="submit" name="restart_wyoming" value="true" class="btn btn-outline-secondary ml-2 float-left">{% trans "Restart voice satellite" %}</button>
                 <button type="submit" class="btn btn-primary disabled ml-2 float-right save-button">{% trans "Save" %}</button>
                 <button type="reset" class="btn btn-outline-primary disabled ml-2 float-right reset-button">{% trans "Reset" %}</button>
               </div>

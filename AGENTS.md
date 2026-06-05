@@ -169,6 +169,7 @@ POST /wakeup
 POST /quiet
 POST /quiet/on
 POST /quiet/off
+POST /wyoming/restart
 POST /audio/url
 POST /tts/ha
 POST /weather/say
@@ -182,6 +183,8 @@ Useful distinctions:
 - `/tts/ha` asks Home Assistant TTS for an MP3 and asks `nabd` to play it.
 - `/weather/say` prepares the weather sentence inside the bridge, asks Home
   Assistant TTS for speech, and sends a combined audio/LED/ear choreography.
+- `/wyoming/restart` restarts `wyoming-satellite.service` and clears the
+  Wyoming status LED after recovery.
 - `/packet` sends a raw `nabd` packet and is useful only for experiments.
 
 The bridge needs the native MP3 decoder for TTS playback:
@@ -203,6 +206,7 @@ script.nabaztag_sleep
 script.nabaztag_wakeup
 script.nabaztag_quiet_on
 script.nabaztag_quiet_off
+script.nabaztag_restart_wyoming
 script.nabaztag_show_weather
 ```
 
@@ -278,6 +282,15 @@ Restart Wyoming separately if the satellite code or service file changed:
 sudo systemctl restart wyoming-satellite.service
 ```
 
+If the nightly Wyoming restart timer changes, install it manually on the device:
+
+```sh
+sudo cp wyoming/wyoming-satellite-nightly-restart.service /lib/systemd/system/wyoming-satellite-nightly-restart.service
+sudo cp wyoming/wyoming-satellite-nightly-restart.timer /lib/systemd/system/wyoming-satellite-nightly-restart.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now wyoming-satellite-nightly-restart.timer
+```
+
 After changing `habridge/habridge.service`:
 
 ```sh
@@ -321,6 +334,12 @@ Audio overruns and `BrokenPipeError` appeared after long runtime once. A clean
 `arecord` test suggested the mic command could still record, and reconnects to
 Home Assistant were logged. Treat this as unresolved reliability work; check HA
 load/logs and network before changing audio code.
+
+The center front red LED is a Wyoming/HA pipeline error status from
+`wyoming/wyoming_event_handler.py`, not a hardware fault. One confirmed cause
+was Home Assistant reporting `stt-provider-missing` for
+`stt.faster_whisper_2`. Fix the Home Assistant Assist pipeline first, then
+restart Wyoming from the web UI, `/wyoming/restart`, or `systemctl`.
 
 ## Code Areas
 

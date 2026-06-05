@@ -60,6 +60,12 @@ rest_command:
     content_type: "application/json"
     payload: "{}"
 
+  nabaztag_restart_wyoming:
+    url: "http://nabaztag.local:10544/wyoming/restart"
+    method: post
+    content_type: "application/json"
+    payload: "{}"
+
   nabaztag_play_mp3_url:
     url: "http://nabaztag.local:10544/audio/url"
     method: post
@@ -188,6 +194,12 @@ script:
     mode: single
     sequence:
       - action: rest_command.nabaztag_quiet_off
+
+  nabaztag_restart_wyoming:
+    alias: Nabaztag - Restart Wyoming satellite
+    mode: single
+    sequence:
+      - action: rest_command.nabaztag_restart_wyoming
 
   nabaztag_show_weather:
     alias: Nabaztag - Show weather

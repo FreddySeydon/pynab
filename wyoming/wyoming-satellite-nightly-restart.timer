@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly restart for Home Assistant Wyoming Satellite
+
+[Timer]
+OnCalendar=*-*-* 04:15:00
+RandomizedDelaySec=20min
+Persistent=true
+Unit=wyoming-satellite-nightly-restart.service
+
+[Install]
+WantedBy=timers.target

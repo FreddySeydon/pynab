@@ -293,6 +293,18 @@ venv/bin/python manage.py migrate nabd nabclockd
 sudo systemctl restart nabd.service nabweb.service habridge.service nabclockd.service
 ```
 
+If this update includes changes to the Pynab web UI, restart `nabweb.service`.
+If it includes Wyoming service/timer changes, install them explicitly:
+
+```sh
+sudo cp wyoming/wyoming-satellite.service /lib/systemd/system/wyoming-satellite.service
+sudo cp wyoming/wyoming-satellite-nightly-restart.service /lib/systemd/system/wyoming-satellite-nightly-restart.service
+sudo cp wyoming/wyoming-satellite-nightly-restart.timer /lib/systemd/system/wyoming-satellite-nightly-restart.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now wyoming-satellite-nightly-restart.timer
+sudo systemctl restart wyoming-satellite.service nabweb.service habridge.service
+```
+
 If `habridge/habridge.conf` was edited locally for Home Assistant URL/token,
 do not commit it. If a pull conflicts with that file, keep a local copy,
 restore the tracked template, pull, then copy the local config back:
@@ -362,6 +374,7 @@ POST /wakeup
 POST /quiet
 POST /quiet/on
 POST /quiet/off
+POST /wyoming/restart
 POST /audio/url
 POST /tts/ha
 POST /weather/say
@@ -373,7 +386,8 @@ stored info animations and then sends a direct all-LEDs-off command, which is
 useful when a command choreography or idle animation leaves a LED stuck on.
 `/packet` sends a raw `nabd` packet and is useful for experiments.
 `/quiet` accepts `{"enabled":true}` or `{"enabled":false}`. `/quiet/on`
-and `/quiet/off` are shortcuts.
+and `/quiet/off` are shortcuts. `/wyoming/restart` restarts
+`wyoming-satellite.service` and clears the Wyoming status LED.
 
 The reset route also sends compatibility clears for the comma-separated
 `HABRIDGE_RESET_INFO_IDS` list. The default list is:
@@ -461,6 +475,7 @@ script.nabaztag_sleep
 script.nabaztag_wakeup
 script.nabaztag_quiet_on
 script.nabaztag_quiet_off
+script.nabaztag_restart_wyoming
 script.nabaztag_show_weather
 ```
 
@@ -524,4 +539,38 @@ mp3 = Mpg123("/tmp/ha_tts_test.mp3")
 print(mp3.get_format())
 print("frames ok")
 PY
+```
+
+## Wyoming status LED and recovery
+
+`wyoming/wyoming_event_handler.py` uses the center front LED as a voice pipeline
+status:
+
+```text
+blue   wake word detected / STT starting
+white  thinking after STT
+green  TTS speaking
+red    Wyoming received an error event
+```
+
+A red center LED is therefore meaningful. For example, Home Assistant can send
+`stt-provider-missing` if an Assist pipeline references an STT provider that is
+not running. Fix the Home Assistant pipeline first, then restart Wyoming:
+
+```sh
+sudo systemctl restart wyoming-satellite.service
+```
+
+or through the bridge:
+
+```sh
+curl -X POST http://127.0.0.1:10544/wyoming/restart
+```
+
+The Pynab web home page also has a `Restart voice satellite` button. The
+optional nightly timer restarts Wyoming once per night to clear long-running
+stream state:
+
+```sh
+systemctl list-timers wyoming-satellite-nightly-restart.timer
 ```

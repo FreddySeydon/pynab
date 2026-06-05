@@ -162,6 +162,16 @@ def set_quiet_mode(enabled: bool) -> Dict[str, Any]:
     }
 
 
+def restart_wyoming() -> Dict[str, Any]:
+    service_results = run_systemctl("restart", ["wyoming-satellite.service"])
+    clear_result = send_to_nabd({"type": "info", "info_id": "wyoming"})
+    return {
+        "status": "ok",
+        "service": service_results[0],
+        "clear_status": clear_result,
+    }
+
+
 def build_audio_packet(audio_url: str, cancelable: bool = False) -> Dict[str, Any]:
     if not isinstance(audio_url, str):
         raise BridgeError(HTTPStatus.BAD_REQUEST, "url must be a string")
@@ -558,6 +568,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
         if path == "/quiet/off":
             return set_quiet_mode(False)
+
+        if path == "/wyoming/restart":
+            return restart_wyoming()
 
         if path == "/audio/url":
             packet = build_audio_packet(body.get("url"), bool(body.get("cancelable", False)))

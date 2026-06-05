@@ -29,6 +29,9 @@ QUIET_SERVICES = [
     ).split(",")
     if service.strip()
 ]
+WYOMING_SERVICE = os.environ.get(
+    "NABWEB_WYOMING_SERVICE", "wyoming-satellite.service"
+)
 
 
 class NabdConnection:
@@ -127,9 +130,12 @@ class NabWebView(BaseView):
     def post(self, request, *args, **kwargs):
         config = Config.load()
         config_changed = False
+        wyoming_restart_result = None
         if "locale" in request.POST:
             config.locale = request.POST["locale"]
             config_changed = True
+        if "restart_wyoming" in request.POST:
+            wyoming_restart_result = self.restart_wyoming()
         if "quiet_mode" in request.POST:
             quiet_mode = request.POST["quiet_mode"] == "true"
             if config.quiet_mode != quiet_mode:
@@ -149,6 +155,7 @@ class NabWebView(BaseView):
             translation.activate(user_language)
             request.LANGUAGE_CODE = translation.get_language()
         context = self.get_context()
+        context["wyoming_restart_result"] = wyoming_restart_result
         return render(request, self.template_name(), context=context)
 
     def apply_quiet_services(self, enabled):
@@ -161,6 +168,36 @@ class NabWebView(BaseView):
                 timeout=15,
                 check=False,
             )
+
+    def restart_wyoming(self):
+        completed = subprocess.run(
+            ["systemctl", "restart", WYOMING_SERVICE],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        asyncio.run(self.clear_wyoming_status())
+        return {
+            "service": WYOMING_SERVICE,
+            "returncode": completed.returncode,
+            "stdout": completed.stdout.strip(),
+            "stderr": completed.stderr.strip(),
+        }
+
+    async def clear_wyoming_status(self):
+        await NabdConnection.transaction(self._do_clear_wyoming_status)
+
+    async def _do_clear_wyoming_status(self, reader, writer):
+        try:
+            writer.write(
+                b'{"type":"info","info_id":"wyoming",'
+                b'"request_id":"wyoming-clear"}\r\n'
+            )
+            await writer.drain()
+            writer.close()
+        except Exception:
+            pass
 
     async def notify_config_update(self, service, slot, value=None):
         await NabdConnection.transaction(

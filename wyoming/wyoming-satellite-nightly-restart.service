@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart Home Assistant Wyoming Satellite
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart wyoming-satellite.service
