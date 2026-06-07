@@ -79,8 +79,8 @@ class NabIOMock(NabIO):
         await super().play_sequence(sequence)
 
     def button(self, button_event):
-        self.button_event_cb.loop.call_soon_threadsafe(
-            self.button_event_cb.callback, button_event
+        self.button_event_cb["loop"].call_soon_threadsafe(
+            self.button_event_cb["callback"], button_event, time.time()
         )
 
     def ears(self, left, right):

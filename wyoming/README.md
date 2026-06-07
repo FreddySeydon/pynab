@@ -401,7 +401,9 @@ Quiet mode is intended for media-center or evening use. It keeps `nabd`,
 `nabwebhook`, `habridge`, and `wyoming-satellite` available, but it turns off
 the `nabd` bottom status LED pulse, moves both ears to the sleeping position
 `10`, and stops the local clock, surprise, and taichi daemons. Turning quiet
-mode off moves both ears back to `0`. By default the bridge controls:
+mode off moves both ears back to `0`. A single physical button click toggles
+quiet mode while `nabd` is idle; this is not sleep mode and does not put `nabd`
+into the `asleep` state. By default the bridge controls:
 
 ```text
 nabclockd.service
@@ -412,7 +414,8 @@ nabtaichid.service
 Override that list in `habridge.conf` with `HABRIDGE_QUIET_SERVICES` if needed.
 The same quiet-mode toggle is also available on the Pynab web interface home
 page. Override the service list used by the web interface with
-`NABWEB_QUIET_SERVICES` if needed.
+`NABWEB_QUIET_SERVICES` if needed. Override the list used by the physical
+button with `NABD_QUIET_SERVICES`.
 
 Optional settings are in `/opt/pynab/habridge/habridge.conf`. Set
 `HABRIDGE_TOKEN` if the bridge should require a bearer token or `?token=...`.
@@ -549,14 +552,16 @@ PY
 status:
 
 ```text
-blue   wake word detected / STT starting
-white  thinking after STT
-green  TTS speaking
+blue   short listening flash after STT starts
+white  short thinking flash after STT stops
+green  short speaking flash after TTS starts
 red    Wyoming received an error event
 ```
 
-On wake word detection/STT start, the ears move to `4`, a slightly-forward
-listening position. This avoids using the sleeping ear position for listening.
+Transient blue, white, and green voice-state feedback is sent as finite command
+choreographies so it cannot linger as idle `info` state. On wake word
+detection/STT start, the ears move to `4`, a slightly-forward listening
+position. This avoids using the sleeping ear position for listening.
 
 A red center LED is therefore meaningful. For example, Home Assistant can send
 `stt-provider-missing` if an Assist pipeline references an STT provider that is

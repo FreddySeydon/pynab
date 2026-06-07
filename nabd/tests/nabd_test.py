@@ -12,6 +12,7 @@ from django.db import close_old_connections
 
 import nabtaichid
 from nabd import nabd
+from nabd.i18n import Config
 from nabd.rfid import TagFlags, TagTechnology
 
 from .mock import NabIOMock
@@ -84,6 +85,14 @@ class TestNabdBase(unittest.TestCase):
         s.settimeout(5.0)
         return SocketIO(s)
 
+    def wait_for_condition(self, condition, timeout=2.0):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if condition():
+                return
+            time.sleep(0.05)
+        self.fail("Timed out waiting for condition")
+
 
 class TestNabd(TestNabdBase):
     def test_state(self):
@@ -95,6 +104,26 @@ class TestNabd(TestNabdBase):
             self.assertEqual(packet_j["state"], "idle")
         finally:
             s.close()
+
+    def test_button_click_toggles_quiet_mode(self):
+        asyncio.run_coroutine_threadsafe(
+            self.nabd.set_quiet_mode(False), self.nabd.loop
+        ).result(2.0)
+        self.nabio.called_list.clear()
+
+        self.nabio.button("click")
+        self.wait_for_condition(lambda: self.nabd.quiet_mode is True)
+        self.assertTrue(Config.load().quiet_mode)
+        self.assertEqual(self.nabio.left_ear, nabd.Nabd.SLEEP_EAR_POSITION)
+        self.assertEqual(self.nabio.right_ear, nabd.Nabd.SLEEP_EAR_POSITION)
+        self.assertEqual(self.nabd.state, nabd.State.IDLE)
+
+        self.nabio.button("click")
+        self.wait_for_condition(lambda: self.nabd.quiet_mode is False)
+        self.assertFalse(Config.load().quiet_mode)
+        self.assertEqual(self.nabio.left_ear, nabd.Nabd.INIT_EAR_POSITION)
+        self.assertEqual(self.nabio.right_ear, nabd.Nabd.INIT_EAR_POSITION)
+        self.assertEqual(self.nabd.state, nabd.State.IDLE)
 
     def test_sleep_wakeup(self):
         s1 = self.service_socket()

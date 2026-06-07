@@ -63,6 +63,14 @@ _PYTEST = os.path.basename(sys.argv[0]) != "nabd.py"
 
 IdleQueueItem = Tuple[ServicePacket, asyncio.StreamWriter]
 
+QUIET_SERVICES = [
+    service.strip()
+    for service in os.environ.get(
+        "NABD_QUIET_SERVICES",
+        "nabclockd.service,nabsurprised.service,nabtaichid.service",
+    ).split(",")
+    if service.strip()
+]
 STATUS_EXPIRED = cast(ResponseExpiredPacketProto, {"status": "expired"})
 STATUS_OK = cast(ResponseOKPacketProto, {"status": "ok"})
 STATUS_CANCELED = cast(ResponseOKPacketProto, {"status": "canceled"})
@@ -182,6 +190,63 @@ class Nabd:
             self.nabio.set_leds(None, None, None, None, None)
         else:
             self.nabio.pulse(Led.BOTTOM, (255, 0, 255))  # Fuchsia
+
+    async def apply_quiet_services(self, enabled):
+        if _PYTEST:
+            return
+        action = "stop" if enabled else "start"
+        for service in QUIET_SERVICES:
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "systemctl",
+                    action,
+                    service,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=15
+                )
+                if proc.returncode != 0:
+                    logging.warning(
+                        "systemctl %s %s failed (%s): stdout=%s stderr=%s",
+                        action,
+                        service,
+                        proc.returncode,
+                        stdout.decode("utf-8", errors="replace").strip(),
+                        stderr.decode("utf-8", errors="replace").strip(),
+                    )
+            except Exception:
+                logging.warning(
+                    "Could not %s quiet-mode service %s",
+                    action,
+                    service,
+                    exc_info=True,
+                )
+
+    async def set_quiet_mode(self, enabled, manage_services=False):
+        from . import i18n
+
+        config = await i18n.Config.load_async()
+        config.quiet_mode = enabled
+        await config.save_async()
+        self.quiet_mode = config.quiet_mode
+        if manage_services:
+            await self.apply_quiet_services(enabled)
+
+        position = (
+            Nabd.SLEEP_EAR_POSITION if enabled else Nabd.INIT_EAR_POSITION
+        )
+        self.ears["left"] = position
+        self.ears["right"] = position
+        if self.state == State.IDLE:
+            await self.nabio.move_ears(position, position)
+            self.apply_status_led()
+            async with self.idle_cv:
+                self.idle_cv.notify()
+
+    async def toggle_quiet_mode_from_button(self):
+        await self.set_quiet_mode(not self.quiet_mode, manage_services=True)
 
     async def _do_transition_to_idle(self):
         """
@@ -755,14 +820,7 @@ class Nabd:
                             writer,
                         )
                         return
-                    from . import i18n
-
-                    config = await i18n.Config.load_async()
-                    config.quiet_mode = packet["value"]
-                    await config.save_async()
-                    self.quiet_mode = config.quiet_mode
-                    if self.state == State.IDLE:
-                        self.apply_status_led()
+                    await self.set_quiet_mode(packet["value"])
                     self.write_response_packet(packet, STATUS_OK, writer)
 
     async def process_test_packet(
@@ -1105,6 +1163,12 @@ class Nabd:
         ):
             asyncio.ensure_future(self.nabio.cancel(True))
             self.playing_canceled = True
+        elif (
+            button_event == "click"
+            and self.state == State.IDLE
+            and self.interactive_service_writer is None
+        ):
+            asyncio.ensure_future(self.toggle_quiet_mode_from_button())
         else:
             self.broadcast_event(
                 "button",
