@@ -231,8 +231,6 @@ class Nabd:
         config.quiet_mode = enabled
         await config.save_async()
         self.quiet_mode = config.quiet_mode
-        if manage_services:
-            await self.apply_quiet_services(enabled)
 
         position = (
             Nabd.SLEEP_EAR_POSITION if enabled else Nabd.INIT_EAR_POSITION
@@ -244,9 +242,13 @@ class Nabd:
             self.apply_status_led()
             async with self.idle_cv:
                 self.idle_cv.notify()
+        if manage_services:
+            await self.apply_quiet_services(enabled)
 
     async def toggle_quiet_mode_from_button(self):
-        await self.set_quiet_mode(not self.quiet_mode, manage_services=True)
+        enabled = not self.quiet_mode
+        logging.info("Button toggling quiet mode %s", "on" if enabled else "off")
+        await self.set_quiet_mode(enabled, manage_services=True)
 
     async def _do_transition_to_idle(self):
         """
@@ -1147,6 +1149,7 @@ class Nabd:
         """
         Thread: run_loop
         """
+        logging.info("Button event: %s in state %s", button_event, self.state.value)
         if button_event == "hold" and self.state == State.IDLE:
             asyncio.ensure_future(self.start_asr())
         elif button_event == "up" and self.state == State.RECORDING:
