@@ -487,12 +487,16 @@ script.nabaztag_show_weather
 `script.nabaztag_show_weather` always drives ears and weather LEDs through the
 bridge. Its speech step uses the bridge `/tts/ha` endpoint, so the Nabaztag
 does not need to appear as a Home Assistant media player. Pass `tts_entity`
-for speech. The package sends raw weather values to `/weather/say`, and the
-bridge prepares a German weather sentence before asking Home Assistant TTS for
-an MP3. `/weather/say` attaches a generated smooth LED choreography to the
-audio command and moves the ears inside the same choreography, so active
-weather LEDs keep running while the rabbit speaks and the Home Assistant script
-only needs one bridge call. If the Home Assistant weather entity exposes
+for speech. The package sends raw weather values to `/weather/say`; the bridge
+prepares a German weather sentence, asks Home Assistant TTS for an MP3, and
+sends `nabd` a combined audio/weather choreography command. The choreography
+moves the ears during speech and runs a final cleanup choreography after the MP3
+finishes.
+
+Weather choreography is intentionally condition-specific: sunny is bright yellow,
+cloudy/fog is a calm white-grey pulse, rain is a blue droplet sweep with fading
+trails, snow is soft white/cyan twinkle, lightning/hail flashes yellow over
+purple, and wind uses teal sweeps. If the Home Assistant weather entity exposes
 `wind_speed`, the spoken sentence also includes rounded wind speed.
 
 To enable bridge speech, create a long-lived access token in Home Assistant and
@@ -552,14 +556,14 @@ PY
 status:
 
 ```text
-blue   short listening flash after STT starts
-white  short thinking flash after STT stops
-green  short speaking flash after TTS starts
+blue   wake word detected / STT listening
+white  STT stopped / Assist thinking
+green  TTS speaking
 red    Wyoming received an error event
 ```
 
-Transient blue, white, and green voice-state feedback is sent as finite command
-choreographies so it cannot linger as idle `info` state. On wake word
+Blue, white, and green voice-state feedback is sent as the `wyoming` idle
+`info` animation and cleared when Wyoming returns to idle. On wake word
 detection/STT start, the ears move to `4`, a slightly-forward listening
 position. This avoids using the sleeping ear position for listening.
 

@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import os
 import socket
 import subprocess
@@ -294,7 +295,7 @@ def build_weather_message(body: Dict[str, Any]) -> str:
     else:
         temperature_text = rounded_text(temperature)
         if language == "de":
-            spoken_unit = "Grad" if unit in ("°C", "°F", "C", "F") else unit
+            spoken_unit = "Grad" if unit in ("\u00b0C", "\u00b0F", "C", "F") else unit
             message = (
                 f"Das Wetter ist {condition_text}, bei "
                 f"{temperature_text} {spoken_unit}."
@@ -317,60 +318,200 @@ def build_weather_message(body: Dict[str, Any]) -> str:
     return message
 
 
-def color_for_condition(condition: str) -> List[Tuple[int, int, int]]:
-    if condition in ("rainy", "pouring", "lightning-rainy"):
-        return [(0, 48, 255), (0, 0, 64), (0, 48, 255)]
-    if condition in ("snowy", "snowy-rainy"):
-        return [(160, 220, 255), (40, 80, 255), (160, 220, 255)]
-    if condition in ("sunny", "clear-night"):
-        return [(255, 210, 0), (255, 160, 0), (255, 210, 0)]
-    if condition in ("cloudy", "partlycloudy", "fog"):
-        return [(120, 150, 180), (50, 80, 130), (120, 150, 180)]
-    if condition in ("lightning", "hail"):
-        return [(80, 0, 180), (255, 255, 120), (80, 0, 180)]
-    if condition in ("windy", "windy-variant"):
-        return [(0, 180, 160), (0, 80, 120), (0, 180, 160)]
-    return [(0, 180, 80), (0, 80, 40), (0, 180, 80)]
+RGB = Tuple[int, int, int]
+WeatherFrame = Dict[int, RGB]
+
+LED_BOTTOM = 0
+LED_RIGHT = 1
+LED_CENTER = 2
+LED_LEFT = 3
+LED_NOSE = 4
+WEATHER_LEDS = (LED_LEFT, LED_CENTER, LED_RIGHT, LED_BOTTOM, LED_NOSE)
 
 
-def interpolate_color(
-    start: Tuple[int, int, int], end: Tuple[int, int, int], step: int, steps: int
-) -> Tuple[int, int, int]:
-    if steps <= 0:
-        return end
+def clamp_color(value: float) -> int:
+    return max(0, min(255, int(round(value))))
+
+
+def blend_color(start: RGB, end: RGB, fraction: float) -> RGB:
     return tuple(
-        int(start[i] + ((end[i] - start[i]) * step / steps)) for i in range(3)
+        clamp_color(start[ix] + ((end[ix] - start[ix]) * fraction))
+        for ix in range(3)
     )
 
 
-def choreography_data_uri(
-    frames: List[List[Tuple[int, int, int]]],
+def frame_from_color(color: RGB, leds: Tuple[int, ...] = WEATHER_LEDS) -> WeatherFrame:
+    return {led: color for led in leds}
+
+
+def add_weather_frame(data: bytearray, frame: WeatherFrame, wait: int = 1) -> None:
+    first = True
+    for led in WEATHER_LEDS:
+        color = frame.get(led, (0, 0, 0))
+        data.extend(
+            [wait if first else 0, 7, led, color[0], color[1], color[2], 0, 0]
+        )
+        first = False
+
+
+def add_ears(data: bytearray, wait: int, left: int, right: int) -> None:
+    data.extend([wait, 8, 0, left, 0])
+    data.extend([0, 8, 1, right, 0])
+
+
+def weather_choreography_data_uri(
+    frames: List[WeatherFrame],
+    frame_duration: int = 8,
     start_ears: Optional[Tuple[int, int]] = None,
     end_ears: Optional[Tuple[int, int]] = None,
+    ear_frames: Optional[Dict[int, Tuple[int, int]]] = None,
 ) -> str:
-    # MTL choreography bytes: wait, opcode, args. Opcode 1 sets frame duration;
-    # opcode 7 sets a single LED. Opcode 8 moves an ear. Front LEDs are
-    # right=1, center=2, left=3. Ears are left=0, right=1.
-    data = bytearray([0, 1, 5])  # one wait unit is 50ms
+    data = bytearray([0, 1, frame_duration])
     if start_ears is not None:
-        data.extend([0, 8, 0, start_ears[0], 0])
-        data.extend([0, 8, 1, start_ears[1], 0])
+        add_ears(data, 0, start_ears[0], start_ears[1])
 
-    led_indexes = (3, 2, 1)
-    for frame in frames:
-        first_led = True
-        for led_index, color in zip(led_indexes, frame):
-            wait = 1 if first_led else 0
-            data.extend([wait, 7, led_index, color[0], color[1], color[2], 0, 0])
-            first_led = False
+    ear_frames = ear_frames or {}
+    for index, frame in enumerate(frames):
+        if index in ear_frames:
+            left, right = ear_frames[index]
+            add_ears(data, 0, left, right)
+        add_weather_frame(data, frame)
 
     if end_ears is not None:
-        data.extend([1, 8, 0, end_ears[0], 0])
-        data.extend([0, 8, 1, end_ears[1], 0])
+        add_ears(data, 1, end_ears[0], end_ears[1])
 
     return (
         "data:application/x-nabaztag-mtl-choreography;base64,"
         + b64encode(bytes(data)).decode("ascii")
+    )
+
+
+def repeated_static_frames(color: RGB, count: int = 240) -> List[WeatherFrame]:
+    return [frame_from_color(color) for _ in range(count)]
+
+
+def pulsing_frames(
+    base: RGB,
+    peak: RGB,
+    count: int = 360,
+    leds: Tuple[int, ...] = WEATHER_LEDS,
+) -> List[WeatherFrame]:
+    frames = []
+    for index in range(count):
+        fraction = (math.sin(index / 18.0) + 1.0) / 2.0
+        frames.append(frame_from_color(blend_color(base, peak, fraction), leds))
+    return frames
+
+
+def rain_frames(count: int = 420) -> List[WeatherFrame]:
+    frames = []
+    base = (0, 0, 18)
+    trail = (0, 24, 110)
+    drop = (0, 85, 255)
+    led_path = (LED_LEFT, LED_CENTER, LED_RIGHT, LED_BOTTOM)
+    for index in range(count):
+        phase = index % 28
+        frame = frame_from_color(base)
+        for path_index, led in enumerate(led_path):
+            distance = abs(phase - (path_index * 5))
+            if distance <= 2:
+                frame[led] = blend_color(drop, trail, distance / 2.0)
+            elif distance <= 5:
+                frame[led] = blend_color(trail, base, (distance - 2) / 3.0)
+        if phase in (22, 23, 24):
+            frame[LED_CENTER] = blend_color(frame[LED_CENTER], (0, 50, 180), 0.5)
+        frames.append(frame)
+    return frames
+
+
+def snow_frames(count: int = 360) -> List[WeatherFrame]:
+    frames = []
+    base = (18, 28, 45)
+    snow = (210, 245, 255)
+    led_path = (LED_LEFT, LED_NOSE, LED_CENTER, LED_RIGHT, LED_BOTTOM)
+    for index in range(count):
+        frame = frame_from_color(base)
+        for path_index, led in enumerate(led_path):
+            phase = (index + (path_index * 11)) % 45
+            if phase < 12:
+                frame[led] = blend_color(base, snow, math.sin((phase / 12.0) * math.pi))
+        frames.append(frame)
+    return frames
+
+
+def lightning_frames(count: int = 360) -> List[WeatherFrame]:
+    frames = []
+    base = (45, 0, 105)
+    flash = (255, 255, 120)
+    for index in range(count):
+        phase = index % 80
+        if phase in (18, 19, 24):
+            frames.append(frame_from_color(flash))
+        elif phase in (20, 21, 25, 26):
+            frames.append(frame_from_color(blend_color(base, flash, 0.45)))
+        else:
+            pulse = (math.sin(index / 14.0) + 1.0) / 2.0
+            frames.append(frame_from_color(blend_color(base, (80, 0, 150), pulse)))
+    return frames
+
+
+def windy_frames(count: int = 360) -> List[WeatherFrame]:
+    frames = []
+    base = (0, 24, 38)
+    gust = (0, 190, 165)
+    led_path = (LED_LEFT, LED_CENTER, LED_RIGHT, LED_BOTTOM)
+    for index in range(count):
+        phase = index % 32
+        frame = frame_from_color(base)
+        for path_index, led in enumerate(led_path):
+            distance = abs(phase - (path_index * 6))
+            if distance <= 6:
+                frame[led] = blend_color(gust, base, distance / 6.0)
+        frames.append(frame)
+    return frames
+
+
+def weather_frames_for_condition(condition: str) -> List[WeatherFrame]:
+    if condition in ("rainy", "pouring", "lightning-rainy"):
+        return rain_frames()
+    if condition in ("snowy", "snowy-rainy"):
+        return snow_frames()
+    if condition in ("sunny", "clear-night"):
+        return repeated_static_frames((255, 210, 0))
+    if condition in ("cloudy", "partlycloudy", "fog"):
+        return pulsing_frames((65, 70, 78), (230, 235, 245))
+    if condition in ("lightning", "hail"):
+        return lightning_frames()
+    if condition in ("windy", "windy-variant"):
+        return windy_frames()
+    return pulsing_frames((0, 45, 22), (0, 190, 85))
+
+
+def build_weather_choreographies(condition: str) -> Tuple[str, str]:
+    frames = weather_frames_for_condition(condition)
+    ear_frames = {
+        0: (10, 10),
+        80: (4, 12),
+        150: (12, 4),
+        220: (10, 10),
+        300: (6, 14),
+    }
+    end_frames = [
+        frame_from_color(blend_color((40, 40, 40), (0, 0, 0), step / 12.0))
+        for step in range(1, 13)
+    ]
+    return (
+        weather_choreography_data_uri(
+            frames,
+            frame_duration=8,
+            start_ears=(10, 10),
+            ear_frames=ear_frames,
+        ),
+        weather_choreography_data_uri(
+            end_frames,
+            frame_duration=5,
+            end_ears=(0, 0),
+        ),
     )
 
 
@@ -410,31 +551,6 @@ def reset_leds() -> Dict[str, Any]:
         "cleared_info_ids": cleared,
         "reset": send_to_nabd(build_led_reset_packet()),
     }
-
-
-def build_weather_choreographies(condition: str) -> Tuple[str, str]:
-    colors = color_for_condition(condition)
-    off = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
-
-    active_frames: List[List[Tuple[int, int, int]]] = []
-    for _ in range(8):
-        for step in range(1, 21):
-            active_frames.append(
-                [interpolate_color(off[ix], colors[ix], step, 20) for ix in range(3)]
-            )
-        for step in range(1, 21):
-            active_frames.append(
-                [interpolate_color(colors[ix], off[ix], step, 20) for ix in range(3)]
-            )
-
-    end_frames = [
-        [interpolate_color(colors[ix], off[ix], step, 12) for ix in range(3)]
-        for step in range(1, 13)
-    ]
-    return (
-        choreography_data_uri(active_frames, start_ears=(10, 10)),
-        choreography_data_uri(end_frames, end_ears=(0, 0)),
-    )
 
 
 def play_ha_tts(body: Dict[str, Any]) -> Dict[str, Any]:

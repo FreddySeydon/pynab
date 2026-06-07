@@ -212,7 +212,7 @@ script:
           entity:
             domain: weather
       tts_entity:
-        required: false
+        required: true
         selector:
           entity:
             domain: tts
@@ -226,7 +226,7 @@ script:
           wind_unit: "{{ state_attr(weather_entity | default('weather.home'), 'wind_speed_unit') or 'km/h' }}"
       - action: rest_command.nabaztag_say_weather
         data:
-          engine_id: "{{ tts_entity }}"
+          engine_id: "{{ tts_entity | default('') }}"
           condition: "{{ condition }}"
           temperature: "{{ temperature }}"
           unit: "{{ unit }}"
